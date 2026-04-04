@@ -18,6 +18,8 @@ function App() {
   const [report, setReport] = useState(null);
   const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [showLogs, setShowLogs] = useState(false);
+  const [currentInsights, setCurrentInsights] = useState([]);
 
   const [view, setView] = useState('assessment');
   const [sessionHistory, setSessionHistory] = useState(() => {
@@ -96,10 +98,13 @@ function App() {
         notes 
       });
       
-      for (const agent of agents) {
-        setActiveAgent(agent);
-        await new Promise(resolve => setTimeout(resolve, 800)); // slightly faster demo
-        setCompletedAgents(prev => [...prev, agent]);
+      const serverTrace = response.data.trace || [];
+      
+      for (const step of serverTrace) {
+        setActiveAgent(step.agent);
+        setCurrentInsights(prev => [...prev, step.insight]);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        setCompletedAgents(prev => [...prev, step.agent]);
       }
 
       setActiveAgent(null);
@@ -332,16 +337,31 @@ function App() {
                   />
                 ))}
               </div>
-              {activeAgent && (
-                <motion.div 
-                  className="trace-log"
-                  key={activeAgent}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                >
-                   &gt; [{activeAgent} Agent] initializing clinical protocols...
-                </motion.div>
-              )}
+
+              <div style={{ marginTop: '24px', textAlign: 'center' }}>
+                  <button className="reset-btn" style={{ fontSize: '12px' }} onClick={() => setShowLogs(!showLogs)}>
+                      {showLogs ? 'Hide Technical Insights' : 'Inspect Agent Reasoning...'}
+                  </button>
+              </div>
+
+              <AnimatePresence>
+                {showLogs && (
+                    <motion.div 
+                        initial={{ height: 0, opacity: 0 }} 
+                        animate={{ height: 'auto', opacity: 1 }} 
+                        exit={{ height: 0, opacity: 0 }}
+                        className="trace-log"
+                        style={{ marginTop: '16px', overflow: 'hidden' }}
+                    >
+                        {currentInsights.map((insight, idx) => (
+                            <div key={idx} style={{ marginBottom: '8px', borderLeft: '2px solid var(--primary)', paddingLeft: '12px' }}>
+                                <span style={{ color: 'var(--primary)', fontWeight: 'bold' }}>&gt; </span>
+                                {insight}
+                            </div>
+                        ))}
+                    </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           )}
 

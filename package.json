@@ -1,0 +1,12 @@
+{
+  "name": "aethermed-agentic-orchestrator",
+  "version": "1.0.0",
+  "description": "Root orchestrator for AetherMed AI",
+  "scripts": {
+    "backend": "node backend/server.js",
+    "frontend": "npm run dev --prefix frontend",
+    "mcp": "node backend/mcp-server.js",
+    "dev": "npx concurrently \"npm run backend\" \"npm run frontend\" \"npm run mcp\"",
+    "install-all": "npm install --prefix backend && npm install --prefix frontend"
+  }
+}

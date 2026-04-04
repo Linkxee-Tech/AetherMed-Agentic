@@ -26,28 +26,46 @@ async function orchestrate(input) {
 
     try {
         // 0. Translation
-        trace.push('Translation');
         context.translation = await translationAgent(context);
+        trace.push({
+            agent: 'Translation',
+            insight: `Detected language: ${context.translation.detectedLanguage}. Normalizing input to English.`
+        });
 
         // 1. Triage
-        trace.push('Triage');
         context.triage = await triageAgent(context);
+        trace.push({
+            agent: 'Triage',
+            insight: `${context.triage.urgency} urgency - ${context.triage.reason}`
+        });
 
         // 2. Research
-        trace.push('Research');
         context.research = await researchAgent(context);
+        trace.push({
+            agent: 'Research',
+            insight: `Primary findings: ${context.research.extractedSymptoms.join(', ')}. Knowledge lookup complete.`
+        });
 
         // 3. Advice
-        trace.push('Advice');
         context.advice = await adviceAgent(context);
+        trace.push({
+            agent: 'Advice',
+            insight: `Calculating clinical safety. Total risk score: ${context.advice.riskScore}/100.`
+        });
 
         // 4. Referral
-        trace.push('Referral');
         context.referral = await referralAgent(context);
+        trace.push({
+            agent: 'Referral',
+            insight: `Proposed care path: ${context.referral.referral.type} at ${context.referral.referral.location}.`
+        });
 
         // 5. Response
-        trace.push('Response');
         const finalOutput = await responseAgent(context);
+        trace.push({
+            agent: 'Response',
+            insight: `Final report formatted to strict FHIR R4 standard. Session complete.`
+        });
         
         return {
             sessionId: sessionId || 'mock-id',
