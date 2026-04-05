@@ -5,7 +5,9 @@ import { Send, Plus, History, Settings, User, Clock, AlertCircle, Menu, X, Mic, 
 import AgentPulse from './components/AgentPulse';
 import ReportCard from './components/ReportCard';
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api/v1';
+const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api/v1').replace(/\/$/, '');
+// Ensure /api/v1 is present if not already included in the env variable
+const API_BASE = RAW_API_BASE.includes('/api/v1') ? RAW_API_BASE : `${RAW_API_BASE}/api/v1`;
 const CLIENT_ID_STORAGE_KEY = 'aethermed_client_id';
 const HISTORY_STORAGE_NAMESPACE = 'aethermed_history';
 const SETTINGS_STORAGE_NAMESPACE = 'aethermed_settings';
