@@ -2,7 +2,7 @@
 
 # 🧠 AetherMed Agentic
 
-**A Multilingual Multi-Agent AI Healthcare Assistant**
+A Multilingual Multi-Agent AI Healthcare Assistant
 
 ---
 
@@ -113,7 +113,7 @@ AetherMed Agentic uses native multilingual capabilities of modern AI models to:
 
 * **Frontend:** React / Vite
 * **Backend:** Node.js (Express)
-* **AI Engine:** Google Gemini API (gemini-1.5-flash)
+* **AI Engine:** OpenAI API
 * **Data Protocol:** FHIR R4 Interoperability 
 
 ---
@@ -185,7 +185,8 @@ Create a `.env` file in the **backend** folder (`backend/.env`):
 
 ```env
 PORT=5000
-GEMINI_API_KEY=your_google_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
+OPENAI_MODEL=gpt-5-mini
 ```
 
 ---
@@ -205,6 +206,14 @@ npm run dev
 ```
 
 The frontend UI will launch on `http://localhost:5173`.
+
+For the smoothest local development flow from the repo root, use:
+
+```bash
+npm run dev
+```
+
+That starts the backend, frontend, and MCP server together without relying on `npx concurrently`.
 
 ---
 

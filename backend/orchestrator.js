@@ -4,6 +4,7 @@ const { researchAgent } = require('./agents/researchAgent');
 const { adviceAgent } = require('./agents/adviceAgent');
 const { referralAgent } = require('./agents/referralAgent');
 const { responseAgent } = require('./agents/responseAgent');
+const { getAgentMode, shouldUseOfflineAgents } = require('./tools/runtime');
 
 /**
  * orchestrate - Coordinates the specialized agents to process symptoms
@@ -12,6 +13,7 @@ const { responseAgent } = require('./agents/responseAgent');
 async function orchestrate(input) {
     const { sessionId } = input;
     const trace = [];
+    const effectiveAgentMode = shouldUseOfflineAgents() ? 'offline' : getAgentMode();
     
     // Shared Context Buffer
     const context = {
@@ -29,6 +31,8 @@ async function orchestrate(input) {
         context.translation = await translationAgent(context);
         trace.push({
             agent: 'Translation',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `Detected language: ${context.translation.detectedLanguage}. Normalizing input to English.`
         });
 
@@ -36,6 +40,8 @@ async function orchestrate(input) {
         context.triage = await triageAgent(context);
         trace.push({
             agent: 'Triage',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `${context.triage.urgency} urgency - ${context.triage.reason}`
         });
 
@@ -43,6 +49,8 @@ async function orchestrate(input) {
         context.research = await researchAgent(context);
         trace.push({
             agent: 'Research',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `Primary findings: ${context.research.extractedSymptoms.join(', ')}. Knowledge lookup complete.`
         });
 
@@ -50,6 +58,8 @@ async function orchestrate(input) {
         context.advice = await adviceAgent(context);
         trace.push({
             agent: 'Advice',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `Calculating clinical safety. Total risk score: ${context.advice.riskScore}/100.`
         });
 
@@ -57,6 +67,8 @@ async function orchestrate(input) {
         context.referral = await referralAgent(context);
         trace.push({
             agent: 'Referral',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `Proposed care path: ${context.referral.referral.type} at ${context.referral.referral.location}.`
         });
 
@@ -64,13 +76,18 @@ async function orchestrate(input) {
         const finalOutput = await responseAgent(context);
         trace.push({
             agent: 'Response',
+            mode: effectiveAgentMode,
+            timestamp: new Date().toISOString(),
             insight: `Final report formatted to strict FHIR R4 standard. Session complete.`
         });
         
         return {
             sessionId: sessionId || 'mock-id',
             data: finalOutput.report,
-            trace
+            trace,
+            meta: {
+                agentMode: effectiveAgentMode
+            }
         };
 
     } catch (error) {
@@ -80,4 +97,3 @@ async function orchestrate(input) {
 }
 
 module.exports = { orchestrate };
-

@@ -1,4 +1,7 @@
-const { callLLM } = require('../tools/geminiService');
+const { callLLM } = require('../tools/openaiService');
+const { shouldUseLiveTranslation } = require('../tools/runtime');
+const { localTranslationAgent } = require('../tools/localClinicalEngine');
+const { normalizeTranslationResult } = require('../tools/agentContracts');
 
 /**
  * TranslationAgent - Detects language and translates to English standard
@@ -6,9 +9,14 @@ const { callLLM } = require('../tools/geminiService');
  */
 async function translationAgent(context) {
     const { symptoms } = context.input;
+
+    if (!shouldUseLiveTranslation()) {
+        return localTranslationAgent(context);
+    }
     
-    const systemPrompt = `You are a Medical Translation Agent.
-Your job is to detect the language of the user's input, and translate it to English for clinical processing.
+    const systemPrompt = `You are the Translation Agent inside AetherMed Agentic.
+Detect the user's dominant language and translate the message into English for downstream clinical processing.
+If the language is unclear, treat it as English.
 If the input is already in English, return it as-is.
 Your output must be a strict JSON object matching this schema:
 {
@@ -20,10 +28,10 @@ Your output must be a strict JSON object matching this schema:
 
     try {
         const result = await callLLM(systemPrompt, userContext);
-        return result;
+        return normalizeTranslationResult(result, symptoms);
     } catch(e) {
-        console.warn("Translation LLM Failed, falling back to English default.");
-        return { detectedLanguage: "English (Fallback)", translatedSymptoms: symptoms };
+        console.warn('Translation LLM failed, using offline emergency backup for language detection/translation.');
+        return localTranslationAgent(context);
     }
 }
 

@@ -1,6 +1,8 @@
 import React from 'react';
-import { motion } from 'framer-motion';
+import { motion as motionLib } from 'framer-motion';
 import { Activity, Search, ShieldCheck, MapPin, FileText, Globe } from 'lucide-react';
+
+const MotionDiv = motionLib.div;
 
 const icons = {
   Translation: Globe,
@@ -35,7 +37,7 @@ const AgentPulse = ({ name, active, complete }) => {
       >
         <Icon size={24} color={active || complete ? color : '#94a3b8'} />
         {active && (
-          <motion.div 
+          <MotionDiv 
             className="pulse-ring"
             initial={{ scale: 0.8, opacity: 0.5 }}
             animate={{ scale: 1.5, opacity: 0 }}
@@ -45,8 +47,9 @@ const AgentPulse = ({ name, active, complete }) => {
         )}
       </div>
       <div className="agent-label">
-        <span style={{ color: active || complete ? '#fff' : '#64748b' }}>{name}</span>
-        {active && <span className="thinking-text">Thinking...</span>}
+        <span style={{ color: active || complete ? 'var(--text-primary)' : 'var(--text-muted)' }}>{name}</span>
+        {active && <span className="thinking-text">Reviewing...</span>}
+        {complete && !active && <span className="complete-text">Complete</span>}
       </div>
 
       <style>{`
@@ -54,11 +57,14 @@ const AgentPulse = ({ name, active, complete }) => {
           display: flex;
           align-items: center;
           gap: clamp(8px, 2vw, 12px);
-          opacity: 0.6;
+          opacity: 0.72;
           transition: all 0.3s ease;
-          padding: 8px;
+          padding: 10px 12px;
+          border: 1px solid var(--border-color);
+          border-radius: 14px;
+          background: var(--surface-muted);
         }
-        .active { opacity: 1; transform: translateX(clamp(4px, 1vw, 8px)); }
+        .active { opacity: 1; transform: translateX(clamp(4px, 1vw, 8px)); border-color: color-mix(in srgb, var(--primary) 40%, var(--border-color)); background: var(--surface-soft); }
         .complete { opacity: 1; }
         
         .icon-container {
@@ -66,7 +72,7 @@ const AgentPulse = ({ name, active, complete }) => {
           width: clamp(40px, 10vw, 48px);
           height: clamp(40px, 10vw, 48px);
           border-radius: 12px;
-          background: rgba(30, 41, 59, 0.5);
+          background: var(--surface-strong);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -90,6 +96,7 @@ const AgentPulse = ({ name, active, complete }) => {
 
         .agent-label span { font-weight: 600; font-size: clamp(12px, 3vw, 14px); line-height: 1.2; }
         .thinking-text { font-size: 10px; color: var(--primary); margin-top: 2px; }
+        .complete-text { font-size: 10px; color: var(--success); margin-top: 2px; }
 
         @media (max-width: 480px) {
           .agent-status-item { padding: 4px; }

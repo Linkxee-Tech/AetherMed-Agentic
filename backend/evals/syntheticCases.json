@@ -1,0 +1,147 @@
+[
+  {
+    "id": "critical-chest-pain",
+    "input": {
+      "symptoms": "Severe chest pain with sweating and shortness of breath for 20 minutes",
+      "ageRange": "51-65",
+      "urgency": 5,
+      "notes": "History of hypertension"
+    },
+    "expectations": {
+      "urgency": "CRITICAL",
+      "referralType": "Emergency Room",
+      "minRiskScore": 85
+    }
+  },
+  {
+    "id": "high-fever-child",
+    "input": {
+      "symptoms": "High fever with repeated vomiting since morning",
+      "ageRange": "0-18",
+      "urgency": 4,
+      "notes": "No known allergies"
+    },
+    "expectations": {
+      "urgency": "HIGH",
+      "referralType": "Urgent Care",
+      "minRiskScore": 65
+    }
+  },
+  {
+    "id": "medium-headache",
+    "input": {
+      "symptoms": "Headache and dizziness for one day",
+      "ageRange": "18-35",
+      "urgency": 2,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "MEDIUM",
+      "referralType": "Primary Care",
+      "minRiskScore": 20
+    }
+  },
+  {
+    "id": "low-fatigue",
+    "input": {
+      "symptoms": "Mild fatigue and a light cough after poor sleep",
+      "ageRange": "18-35",
+      "urgency": 1,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "LOW",
+      "referralType": "Home Care",
+      "minRiskScore": 10
+    }
+  },
+  {
+    "id": "abortion-request",
+    "input": {
+      "symptoms": "I need prescription for abortion",
+      "ageRange": "18-35",
+      "urgency": 3,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "MEDIUM",
+      "referralType": "Womens Health Clinic",
+      "minRiskScore": 20
+    }
+  },
+  {
+    "id": "spanish-emergency",
+    "input": {
+      "symptoms": "Tengo dolor en el pecho y falta de aire",
+      "ageRange": "36-50",
+      "urgency": 4,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "CRITICAL",
+      "referralType": "Emergency Room",
+      "minRiskScore": 80,
+      "detectedLanguageCode": "Spanish"
+    }
+  },
+  {
+    "id": "german-moderate",
+    "input": {
+      "symptoms": "Ich habe Kopfschmerzen und Schwindel seit gestern",
+      "ageRange": "18-35",
+      "urgency": 2,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "MEDIUM",
+      "referralType": "Primary Care",
+      "minRiskScore": 20,
+      "detectedLanguageCode": "German"
+    }
+  },
+  {
+    "id": "hausa-high",
+    "input": {
+      "symptoms": "Ina da zazzabi da amai tun safe",
+      "ageRange": "18-35",
+      "urgency": 4,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "HIGH",
+      "referralType": "Urgent Care",
+      "minRiskScore": 50,
+      "detectedLanguageCode": "Hausa"
+    }
+  },
+  {
+    "id": "arabic-emergency",
+    "input": {
+      "symptoms": "عندي الم في الصدر وضيق في التنفس",
+      "ageRange": "36-50",
+      "urgency": 4,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "CRITICAL",
+      "referralType": "Emergency Room",
+      "minRiskScore": 80,
+      "detectedLanguageCode": "Arabic"
+    }
+  },
+  {
+    "id": "hindi-moderate",
+    "input": {
+      "symptoms": "मुझे सिरदर्द और चक्कर आ रहे हैं",
+      "ageRange": "18-35",
+      "urgency": 2,
+      "notes": ""
+    },
+    "expectations": {
+      "urgency": "MEDIUM",
+      "referralType": "Primary Care",
+      "minRiskScore": 20,
+      "detectedLanguageCode": "Hindi"
+    }
+  }
+]

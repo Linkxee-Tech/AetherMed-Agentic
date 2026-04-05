@@ -47,10 +47,12 @@ function risk_score(severity, ageRange, urgency) {
 
     // Age risk factor
     if (ageRange) {
-        if (ageRange.includes('60') || ageRange.includes('70') || ageRange.includes('80+')) {
-            score += 20;
-        } else if (ageRange.includes('infant') || ageRange.includes('0-2')) {
+        if (ageRange.includes('infant') || ageRange.includes('0-2')) {
             score += 25;
+        } else if (ageRange.includes('0-18')) {
+            score += 10;
+        } else if (ageRange.includes('51') || ageRange.includes('60') || ageRange.includes('65+') || ageRange.includes('70') || ageRange.includes('80+')) {
+            score += 20;
         }
     }
 
@@ -86,11 +88,26 @@ function referral_lookup(severity, location = "Local") {
 // 5. format_response(agent_outputs) → strict FHIR R4 JSON Bundle
 function format_response(context) {
     // Expected context: { input, triage, research, advice, referral }
+    const timestamp = new Date().toISOString();
     
     // Map existing custom JSON into strict FHIR standard schemas
     const bundle = {
         "resourceType": "Bundle",
         "type": "collection",
+        "identifier": {
+            "system": "urn:aethermed:session",
+            "value": context.input?.sessionId || "local-session"
+        },
+        "meta": {
+            "lastUpdated": timestamp,
+            "tag": [{
+                "display": "Simulated healthcare hackathon assessment"
+            }]
+        },
+        "extension": [{
+            "url": "urn:aethermed:age-range",
+            "valueString": context.input?.ageRange || "unknown"
+        }],
         "entry": []
     };
 
@@ -112,13 +129,14 @@ function format_response(context) {
     });
 
     // 2. ClinicalImpression (Triage & Findings)
+    const commonCauses = context.advice?.commonCauses ? `Common causes: ${context.advice.commonCauses}. ` : "";
     bundle.entry.push({
         "fullUrl": "urn:uuid:imp-1",
         "resource": {
             "resourceType": "ClinicalImpression",
             "status": "completed",
             "description": context.triage?.reason || "Initial triage assessment",
-            "summary": context.research?.knowledge || "No findings available.",
+            "summary": `${commonCauses}${context.research?.knowledge || "No findings available."}`,
             "protocol": [context.triage?.urgency || "UNKNOWN"],
             "investigation": [{
                 "code": { "text": "Clinical Risk Score" },
@@ -129,6 +147,7 @@ function format_response(context) {
 
     // 3. CarePlan (Advice & Referral)
     const instructions = context.advice?.recommendations || [];
+    const medicationSuggestions = context.advice?.medicationSuggestions || [];
     const referral = context.referral?.referral;
     
     const activities = instructions.map(rec => ({
@@ -158,6 +177,29 @@ function format_response(context) {
                 "text": "DISCLAIMER: AetherMed is a simulated system for demonstration purposes only. It is NOT a medical device."
             }]
         }
+    });
+
+    medicationSuggestions.forEach((medication, index) => {
+        bundle.entry.push({
+            "fullUrl": `urn:uuid:med-${index + 1}`,
+            "resource": {
+                "resourceType": "MedicationRequest",
+                "status": "active",
+                "intent": "proposal",
+                "category": [{
+                    "text": medication.type || "OTC"
+                }],
+                "medicationCodeableConcept": {
+                    "text": medication.name
+                },
+                "dosageInstruction": [{
+                    "text": medication.instructions
+                }],
+                "note": [{
+                    "text": medication.cautions
+                }]
+            }
+        });
     });
 
     return bundle;
