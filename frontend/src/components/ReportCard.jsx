@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { motion as motionLib, AnimatePresence } from 'framer-motion';
 import { CheckCircle, Info, Code, ChevronDown, ChevronUp, ShieldAlert, Pill } from 'lucide-react';
+import MultimodalSummaryCard from './MultimodalSummaryCard';
 
 const MotionDiv = motionLib.div;
 
@@ -137,6 +138,8 @@ const ReportCard = ({ data }) => {
         <h2>AetherMed assessment summary</h2>
         <p className="timestamp">Generated {new Date().toLocaleString()}</p>
       </div>
+
+      <MultimodalSummaryCard summary={bundle.multimodalSummary} />
 
       <div className="summary-hero" style={{ borderColor: `${currentColor}55` }}>
         <div className="summary-lead">

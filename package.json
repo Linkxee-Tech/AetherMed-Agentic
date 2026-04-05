@@ -1,7 +1,7 @@
 {
-  "name": "aethermed-agentic-orchestrator",
+  "name": "aethermed-agentic",
   "version": "1.0.0",
-  "description": "Root orchestrator for AetherMed AI",
+  "description": "Root orchestrator for AetherMed Agentic",
   "scripts": {
     "backend": "node backend/server.js",
     "frontend": "npm run dev --prefix frontend",

@@ -12,7 +12,7 @@ This repository now supports a stronger local-only workflow while Prompt Opinion
 
 ## Offline Agent Mode
 
-Set `AETHERMED_AGENT_MODE=offline` in the backend environment to force local heuristic agents instead of Gemini.
+Set `AETHERMED_AGENT_MODE=offline` in the backend environment to force local heuristic agents instead of live OpenAI-powered routing.
 
 This is useful for:
 

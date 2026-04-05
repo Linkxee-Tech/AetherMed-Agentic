@@ -2,6 +2,10 @@ const ALLOWED_URGENCY = ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'];
 const ALLOWED_REFERRALS = ['Emergency Room', 'Urgent Care', 'Primary Care', 'Home Care', 'Womens Health Clinic'];
 const ALLOWED_ACTION_URGENCY = ['HIGH', 'MEDIUM', 'LOW'];
 const ALLOWED_MEDICATION_TYPES = ['OTC', 'CLINICIAN_REVIEW'];
+const ALLOWED_VISUAL_SAFETY_LEVELS = ['Low', 'Moderate', 'High'];
+const ALLOWED_IMAGE_QUALITY = ['clear', 'unclear', 'incomplete'];
+const ALLOWED_DOCUMENT_READABILITY = ['clear', 'partial', 'unclear'];
+const ALLOWED_VISUAL_REVIEW_MODES = ['visible_symptom', 'medical_imaging'];
 
 function sanitizeText(value, fallback, maxLength = 400) {
     if (typeof value !== 'string') {
@@ -28,6 +32,18 @@ function uniqueStrings(values) {
         seen.add(key);
         return true;
     });
+}
+
+function normalizeStringList(values, fallback, maxItems = 5, maxLength = 220) {
+    const normalized = Array.isArray(values)
+        ? values
+            .filter((value) => typeof value === 'string')
+            .map((value) => sanitizeText(value, '', maxLength))
+            .filter(Boolean)
+        : [];
+    const deduped = uniqueStrings(normalized).slice(0, maxItems);
+
+    return deduped.length ? deduped : fallback;
 }
 
 function normalizeTranslationResult(result, fallbackSymptoms) {
@@ -108,11 +124,73 @@ function normalizeReferralResult(result, fallbackReferral) {
     };
 }
 
+function normalizeVisualAssessmentResult(result, fallback) {
+    const safetyLevel = ALLOWED_VISUAL_SAFETY_LEVELS.includes(result?.safetyLevel)
+        ? result.safetyLevel
+        : fallback.safetyLevel;
+    const imageQuality = ALLOWED_IMAGE_QUALITY.includes(result?.imageQuality)
+        ? result.imageQuality
+        : fallback.imageQuality;
+    const reviewMode = ALLOWED_VISUAL_REVIEW_MODES.includes(result?.reviewMode)
+        ? result.reviewMode
+        : fallback.reviewMode;
+
+    return {
+        detectedLanguage: sanitizeText(result?.detectedLanguage, fallback.detectedLanguage, 80),
+        reviewMode,
+        imageQuality,
+        visualObservations: normalizeStringList(result?.visualObservations, fallback.visualObservations, 6, 220),
+        possibleGeneralConcerns: normalizeStringList(result?.possibleGeneralConcerns, fallback.possibleGeneralConcerns, 5, 220),
+        safetyLevel,
+        recommendedNextSteps: normalizeStringList(result?.recommendedNextSteps, fallback.recommendedNextSteps, 5, 220),
+        whenToSeekMedicalHelpImmediately: normalizeStringList(
+            result?.whenToSeekMedicalHelpImmediately,
+            fallback.whenToSeekMedicalHelpImmediately,
+            5,
+            220
+        ),
+        finalShortResponse: sanitizeText(result?.finalShortResponse, fallback.finalShortResponse, 220),
+        acknowledgment: sanitizeText(result?.acknowledgment, fallback.acknowledgment || '', 220),
+        whatCanBeSaidSafely: sanitizeText(result?.whatCanBeSaidSafely, fallback.whatCanBeSaidSafely || '', 320),
+        whatCannotBeConfirmed: sanitizeText(result?.whatCannotBeConfirmed, fallback.whatCannotBeConfirmed || '', 320),
+        recommendedNextStepSummary: sanitizeText(
+            result?.recommendedNextStepSummary,
+            fallback.recommendedNextStepSummary || fallback.finalShortResponse,
+            220
+        ),
+        finalSafeResponse: sanitizeText(
+            result?.finalSafeResponse,
+            fallback.finalSafeResponse || fallback.finalShortResponse,
+            320
+        )
+    };
+}
+
+function normalizeDocumentExplanationResult(result, fallback) {
+    const readability = ALLOWED_DOCUMENT_READABILITY.includes(result?.readability)
+        ? result.readability
+        : fallback.readability;
+
+    return {
+        detectedLanguage: sanitizeText(result?.detectedLanguage, fallback.detectedLanguage, 80),
+        documentType: sanitizeText(result?.documentType, fallback.documentType, 80),
+        readability,
+        documentSummary: sanitizeText(result?.documentSummary, fallback.documentSummary, 320),
+        keyFindings: normalizeStringList(result?.keyFindings, fallback.keyFindings, 6, 220),
+        simpleMeaning: normalizeStringList(result?.simpleMeaning, fallback.simpleMeaning, 6, 220),
+        importantWarningSigns: normalizeStringList(result?.importantWarningSigns, fallback.importantWarningSigns, 6, 220),
+        suggestedNextStep: sanitizeText(result?.suggestedNextStep, fallback.suggestedNextStep, 220),
+        finalExplanation: sanitizeText(result?.finalExplanation, fallback.finalExplanation, 320)
+    };
+}
+
 module.exports = {
     sanitizeText,
     normalizeTranslationResult,
     normalizeTriageResult,
     normalizeResearchResult,
     normalizeAdviceResult,
-    normalizeReferralResult
+    normalizeReferralResult,
+    normalizeVisualAssessmentResult,
+    normalizeDocumentExplanationResult
 };

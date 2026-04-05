@@ -1,16 +1,32 @@
-# React + Vite
+# AetherMed Agentic Frontend
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+This frontend is a React + Vite interface for AetherMed Agentic.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- Collects text symptoms, age range, urgency, and optional notes
+- Supports image review for visible body issues
+- Supports medical document explanation from screenshots, text files, and PDFs with extractable text
+- Includes an upload assistant that classifies uploads and asks only the minimum extra context needed
+- Includes direct camera capture for users who want to scan immediately instead of choosing an existing file
+- Renders structured multimodal summaries returned by the backend
 
-## React Compiler
+## Local development
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+```bash
+npm install
+npm run dev
+```
 
-## Expanding the ESLint configuration
+The frontend expects the backend API at `http://127.0.0.1:5000/api/v1` unless `VITE_API_BASE_URL` is provided.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+## Build
+
+```bash
+npm run build
+```
+
+## Notes
+
+- `pdfjs-dist` is loaded lazily so PDF support does not bloat the main bundle.
+- The UI is designed as a presentation-ready demo shell, but all medical output remains safety-limited and non-diagnostic.

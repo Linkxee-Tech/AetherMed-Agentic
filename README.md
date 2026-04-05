@@ -1,267 +1,254 @@
----
+# AetherMed Agentic
 
-# 🧠 AetherMed Agentic
+AetherMed Agentic is a multilingual, multimodal healthcare guidance app built around a safety-first orchestration workflow.
 
-A Multilingual Multi-Agent AI Healthcare Assistant
+It can handle:
+- text symptom intake
+- visible body image review
+- medical document explanation
+- X-ray or scan uploads with non-diagnostic safety guidance
+- guided upload routing through an upload assistant
 
----
+## Safety
 
-## 🚀 Overview
+- AetherMed does not provide a medical diagnosis.
+- AetherMed does not replace a doctor, radiologist, pharmacist, or emergency service.
+- Prescription drug dosing is not generated.
+- Emergency symptoms are escalated with urgent follow-up guidance.
 
-**AetherMed Agentic** is a next-generation healthcare AI system designed to provide **intelligent, safe, and real-time health guidance** using a **multi-agent architecture**.
+## Main Flows
 
-Unlike traditional chatbots, AetherMed Agentic operates as a **coordinated system of AI agents** that analyze symptoms, assess risk, and recommend appropriate next steps.
+### 1. Text symptom analysis
 
-It is built to be **globally accessible**, leveraging multilingual AI to support users in their native languages.
+Users can enter:
+- symptoms
+- age range
+- urgency from 1 to 5
+- optional notes
 
----
+The backend routes this through:
+- Translation
+- Triage
+- Research
+- Advice
+- Referral
+- Response
 
-## 🎯 Problem
+### 2. Visible body image review
 
-Millions of people struggle to:
+Users can upload or capture a photo of:
+- rash
+- swelling
+- wound
+- discoloration
+- other external visible body changes
 
-* Understand their symptoms
-* Decide when to seek medical care
-* Access reliable preliminary health guidance
+The system describes only broad visible patterns and gives safe next steps.
 
-This often leads to:
+### 3. Medical document explanation
 
-* Delayed treatment
-* Unsafe self-medication
-* Poor health decisions
+Users can explain:
+- diagnosis notes
+- lab summaries
+- prescription notes
+- clinic reports
+- screenshots of reports
+- text files
+- PDFs with extractable text
 
----
+The system explains the document in simple language without overriding the original report.
 
-## 💡 Solution
+### 4. Medical imaging safety flow
 
-AetherMed Agentic solves this by providing:
+If an upload appears to be:
+- X-ray
+- CT
+- MRI
+- ultrasound
+- radiograph
+- similar medical imaging
 
-* 🧠 Intelligent symptom analysis
-* ⚠️ Risk-level classification (low, moderate, emergency)
-* 📚 Medical insight generation
-* 💊 Safe, non-diagnostic recommendations
-* 🚑 Guided next steps (home care, clinic, emergency)
-* 🌍 Multilingual support (global usability)
+AetherMed does not diagnose the image. It responds with a safety-first non-diagnostic explanation and directs the user to professional review.
 
----
+### 5. Upload assistant
 
-## 🏗️ Architecture
+The upload assistant:
+- identifies whether an upload looks like a symptom image, medical report, or scan
+- asks for only minimal extra context
+- reminds the user that the system provides guidance, not diagnosis
+- routes the upload to the correct workflow
 
-### 🔗 Multi-Agent System (A2A)
+It also includes a direct camera capture button so users can scan or photograph something immediately without needing an existing file on the device.
 
-The system uses **Agent-to-Agent communication**:
+## Tech Stack
 
-```text
-User Input
-   ↓
-Orchestrator
-   ↓
-Triage Agent
-   ↓
-Medical Insight Agent
-   ↓
-Recommendation Agent
-   ↓
-Referral Agent
-   ↓
-Final Response
-```
+- Frontend: React + Vite
+- Backend: Node.js + Express
+- AI Engine: OpenAI API with offline fallback logic
+- Persistence: optional MongoDB
 
----
+## Environment Variables
 
-### 🧠 Agents
-
-* **Orchestrator Agent**
-  Coordinates workflow and manages agent communication
-
-* **Triage Agent**
-  Assesses urgency and detects red flags
-
-* **Medical Insight Agent**
-  Provides possible explanations using medical knowledge
-
-* **Recommendation Agent**
-  Generates safe, non-diagnostic advice
-
-* **Referral Agent**
-  Suggests next steps (self-care, clinic, emergency care)
-
----
-
-### 🔧 Tools Layer (MCP-style)
-
-* Symptom parsing
-* Risk scoring
-* Medical knowledge lookup
-* Response formatting (Strict FHIR R4 standard)
-
----
-
-## 🌍 Multilingual Support
-
-AetherMed Agentic uses native multilingual capabilities of modern AI models to:
-
-* Automatically detect user language
-* Understand global inputs
-* Respond in the user’s native language
-
-👉 No external translation APIs required
-
----
-
-## 🛠️ Tech Stack
-
-* **Frontend:** React / Vite
-* **Backend:** Node.js (Express)
-* **AI Engine:** OpenAI API
-* **Data Protocol:** FHIR R4 Interoperability 
-
----
-
-## ⚙️ How It Works
-
-1. User submits symptoms
-2. System analyzes input
-3. Agents collaborate to:
-   * assess risk
-   * interpret symptoms
-   * generate safe advice
-4. Final response is returned in user’s language via a strict FHIR data payload
-
----
-
-## ⚠️ Safety & Disclaimer
-
-* This system **does NOT provide medical diagnosis**
-* All recommendations are **informational only**
-* Users are advised to consult qualified healthcare professionals
-* Emergency symptoms trigger **immediate escalation advice**
-
----
-
-## 🎥 Demo Flow
-
-1. User inputs:
-   > “Chest pain and sweating”
-2. System:
-   * Detects high risk
-   * Flags emergency
-3. Output:
-   * Risk Level: CRITICAL
-   * Recommendation: Seek urgent medical attention at the nearest Emergency Room
-
----
-
-## 🏆 Key Features
-
-* Multi-agent AI system (not a chatbot)
-* Real-time decision support
-* Safety-first design
-* Global multilingual accessibility
-* Scalable architecture
-
----
-
-## 📦 Installation 
-
-```bash
-git clone https://github.com/Linkxee-Tech/AetherMed-Agentic.git
-cd AetherMed-Agentic
-
-# Install backend dependencies
-cd backend
-npm install
-
-# Install frontend dependencies
-cd ../frontend
-npm install
-```
-
----
-
-## 🔑 Environment Variables
-
-Create a `.env` file in the **backend** folder (`backend/.env`):
+Copy `backend/.env.example` to `backend/.env` and fill in your values.
 
 ```env
 PORT=5000
 OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-5-mini
+OPENAI_VISION_MODEL=gpt-4.1-mini
+AETHERMED_AGENT_MODE=auto
+ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+MONGODB_URI=
 ```
 
----
+Notes:
+- If `OPENAI_API_KEY` is missing, the app falls back to offline heuristic mode for supported flows.
+- If `MONGODB_URI` is missing or unreachable, the app still runs without persistence.
 
-## ▶️ Run the Project
+## Install
 
-From the root `AetherMed-Agentic` folder, you can use our proxy scripts to start the environments:
+From the repo root:
 
-**Terminal 1 (Backend):**
+```bash
+npm run install-all
+```
+
+Or install individually:
+
+```bash
+cd backend
+npm install
+
+cd ../frontend
+npm install
+```
+
+## Run Locally
+
+From the repo root:
+
+```bash
+npm run dev
+```
+
+This starts:
+- backend API
+- frontend dev server
+- MCP-style tool server
+
+You can also run them separately:
+
 ```bash
 npm run backend
+npm run frontend
+npm run mcp
 ```
 
-**Terminal 2 (Frontend):**
-```bash
-npm run dev
+Frontend:
+- `http://localhost:5173`
+
+Backend health:
+- `http://127.0.0.1:5000/api/v1/health`
+
+## API Endpoints
+
+### Health
+
+```http
+GET /api/v1/health
 ```
 
-The frontend UI will launch on `http://localhost:5173`.
+### Text symptoms
 
-For the smoothest local development flow from the repo root, use:
-
-```bash
-npm run dev
+```http
+POST /api/v1/analyze
 ```
-
-That starts the backend, frontend, and MCP server together without relying on `npx concurrently`.
-
----
-
-## 🧪 Example API Request
 
 ```json
-POST /api/v1/analyze
-
 {
-  "symptoms": "I have headache and a heavy fever.",
-  "ageRange": "18-35",
-  "urgency": 3,
-  "notes": "History of migraines"
+  "symptoms": "Chest pain with sweating",
+  "ageRange": "51-65",
+  "urgency": 4,
+  "notes": "Started 20 minutes ago"
 }
 ```
 
----
+### Visible image review
 
-## 🚀 Future Improvements
+```http
+POST /api/v1/analyze-visual
+```
 
-* Real hospital/location integration via MCP Superpowers
-* Expanded medical dataset knowledge base
-* Real-time external Database connection
-* Mobile app version
+```json
+{
+  "imageDataUrl": "data:image/jpeg;base64,...",
+  "notes": "Red itchy rash on left arm for 2 days",
+  "languageHint": "en-US"
+}
+```
 
----
+### Medical document explanation
 
-## 📚 What We Learned
+```http
+POST /api/v1/analyze-document
+```
 
-* Power of multi-agent AI systems
-* Ensuring LLM reliability and data-structure safety in healthcare
-* Designing scalable and modular architectures
-* Enforcing strict Open Standard formats (FHIR)
+```json
+{
+  "imageDataUrl": "data:image/png;base64,...",
+  "documentText": "",
+  "notes": "Please explain the highlighted findings",
+  "languageHint": "en-US"
+}
+```
 
----
+### Upload assistant
 
-## 🤝 Contributing
+```http
+POST /api/v1/upload-assistant
+```
 
-Contributions are welcome. Feel free to fork and improve.
+### Unified multimodal route
 
----
+```http
+POST /api/v1/analyze-input
+```
 
-## 📜 License
+This route detects the input type and routes it internally to:
+- text triage flow
+- visible image flow
+- document explanation flow
+- scan safety flow
 
-MIT License
+## Validation and Guardrails
 
----
+The backend now blocks or constrains:
+- empty required submissions
+- oversized text input
+- oversized image uploads
+- invalid image payloads
+- obvious instruction-like prompt injection text
 
-## 🏁 Final Note
+Errors are returned as safe frontend-facing messages without exposing sensitive internals.
 
-**AetherMed Agentic** represents a step toward intelligent, accessible, and responsible AI-powered healthcare guidance.
+## Local Verification
+
+Backend synthetic evaluation:
+
+```bash
+cd backend
+npm run eval:synthetic
+```
+
+Frontend production build:
+
+```bash
+cd frontend
+npm run build
+```
+
+## Current Notes
+
+- The app is designed for demo and prototype use, not real clinical deployment.
+- Session persistence is optional and depends on MongoDB availability.
+- The repo should use `backend/.env.example` as the shareable template. Real secrets should stay only in local `backend/.env`.
