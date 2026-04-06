@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
 import { motion as motionLib, AnimatePresence } from 'framer-motion';
-import { CheckCircle, Info, Code, ChevronDown, ChevronUp, ShieldAlert, Pill } from 'lucide-react';
+import { CheckCircle, Info, Code, ChevronDown, ChevronUp, Pill, Languages, ClipboardList, ArrowRightCircle } from 'lucide-react';
 import MultimodalSummaryCard from './MultimodalSummaryCard';
+import RiskBadge from './RiskBadge';
+import SafetyBanner from './SafetyBanner';
+import { formatDetectedLanguage, getRiskTheme } from '../lib/clinicalPresentation';
 
 const MotionDiv = motionLib.div;
 
@@ -94,20 +97,10 @@ const ReportCard = ({ data }) => {
     STABLE: 'LOW',
     UNKNOWN: 'MODERATE'
   };
-  const riskColors = {
-    EMERGENCY: '#dc2626',
-    HIGH: '#ef4444',
-    MODERATE: '#eab308',
-    LOW: '#86efac'
-  };
   const riskCode = presentation?.riskLevelCode || severityToRiskCode[urgencyLevel] || 'MODERATE';
-  const riskLabel = presentation?.riskLevel || ({
-    EMERGENCY: 'Emergency',
-    HIGH: 'High',
-    MODERATE: 'Moderate',
-    LOW: 'Low'
-  }[riskCode]);
-  const currentColor = riskColors[riskCode] || '#64748b';
+  const riskTheme = getRiskTheme(presentation?.riskLevel || riskCode);
+  const riskLabel = presentation?.riskLevel || riskTheme.label;
+  const currentColor = riskTheme.accent;
   const concernLabel = observations.some((item) => typeof item === 'string' && item.toLowerCase().includes('request'))
     ? 'Reported concern'
     : 'Observed symptoms';
@@ -118,7 +111,7 @@ const ReportCard = ({ data }) => {
     : instructions.map((instruction) => `${instruction.title}: ${instruction.action}`);
   const referralAdvice = presentation?.referralAdvice || (referral ? `${referral.type}: ${referral.action}` : 'Review the assessment details and arrange follow-up based on symptom severity.');
   const finalUserResponse = presentation?.finalUserResponse || primaryAction;
-  const displayedLanguage = presentation?.detectedLanguage || detectedLanguage || 'English';
+  const displayedLanguage = formatDetectedLanguage(presentation?.detectedLanguage || detectedLanguage || 'English');
 
   return (
     <MotionDiv
@@ -129,11 +122,9 @@ const ReportCard = ({ data }) => {
     >
       <div className="report-header">
         <div className="badge-row">
-          <div className="urgency-badge" style={{ backgroundColor: `${currentColor}1f`, color: currentColor }}>
-            {riskLabel} risk
-          </div>
+          <RiskBadge level={riskCode} />
           <div className="score-badge">Risk score: {clinicalScore}</div>
-          <div className="language-badge">Language: {displayedLanguage}</div>
+          <div className="language-badge"><Languages size={14} /> {displayedLanguage}</div>
         </div>
         <h2>AetherMed assessment summary</h2>
         <p className="timestamp">Generated {new Date().toLocaleString()}</p>
@@ -169,9 +160,26 @@ const ReportCard = ({ data }) => {
         )}
       </div>
 
+      <div className="triage-overview-grid">
+        <div className="overview-card">
+          <span className="summary-kicker">Primary concern</span>
+          <strong>{mainConcernSummary}</strong>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Risk assessment</span>
+          <strong style={{ color: currentColor }}>{riskLabel} risk</strong>
+          <span>Structured from symptom intake, urgency, and safety checks.</span>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Detected language</span>
+          <strong>{displayedLanguage}</strong>
+          <span>Response phrasing is aligned to the detected or supplied language context.</span>
+        </div>
+      </div>
+
       <div className="report-grid">
         <div className="report-section">
-          <h3><Info size={18} /> Main concern summary</h3>
+          <h3><ClipboardList size={18} /> Main concern summary</h3>
           <div className="findings-panel">
             <div className="finding-item">
               <strong>Detected language</strong>
@@ -219,7 +227,7 @@ const ReportCard = ({ data }) => {
       </div>
 
       <div className="report-section medication-section">
-        <h3><Info size={18} /> Referral advice</h3>
+        <h3><ArrowRightCircle size={18} /> Referral advice</h3>
         <div className="finding-item">
           <strong>Best next step</strong>
           <span>{referralAdvice}</span>
@@ -251,10 +259,12 @@ const ReportCard = ({ data }) => {
         </div>
       )}
 
-      <div className="disclaimer">
-        <ShieldAlert size={16} />
-        <span>This is safety guidance for demonstration purposes only. It does not replace professional medical advice or emergency services. Medication suggestions are limited and should only be followed as label-directed or after clinician review.</span>
-      </div>
+      <SafetyBanner
+        compact
+        tone={riskCode === 'EMERGENCY' ? 'urgent' : 'warning'}
+        title="AetherMed does not provide a diagnosis"
+        message="This is safety guidance for demonstration purposes only. It does not replace professional medical advice, emergency services, or formal clinician review. Medication suggestions should only be followed exactly as label-directed or after clinician confirmation."
+      />
 
       <div className="raw-toggle-wrap">
         <button
@@ -289,7 +299,7 @@ const ReportCard = ({ data }) => {
           margin-top: 12px;
           max-width: 960px;
           width: 100%;
-          border-top: 4px solid var(--primary);
+          border-top: 4px solid ${currentColor};
         }
 
         .report-header {
@@ -305,11 +315,11 @@ const ReportCard = ({ data }) => {
           margin-bottom: 14px;
         }
 
-        .urgency-badge,
         .score-badge,
         .language-badge {
           display: inline-flex;
           align-items: center;
+          gap: 8px;
           min-height: 32px;
           padding: 6px 12px;
           border-radius: 999px;
@@ -348,6 +358,34 @@ const ReportCard = ({ data }) => {
           border: 1px solid var(--border-color);
           border-radius: 22px;
           background: linear-gradient(160deg, var(--surface-soft), transparent);
+        }
+
+        .triage-overview-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 22px;
+        }
+
+        .overview-card {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 16px;
+          border-radius: 18px;
+          border: 1px solid var(--border-color);
+          background: var(--surface-muted);
+        }
+
+        .overview-card strong {
+          color: var(--text-primary);
+          line-height: 1.45;
+        }
+
+        .overview-card span:last-child {
+          color: var(--text-secondary);
+          line-height: 1.6;
+          font-size: 13px;
         }
 
         .summary-kicker {
@@ -453,20 +491,6 @@ const ReportCard = ({ data }) => {
         .action-urgency.high { background: var(--danger-soft); color: var(--danger); }
         .action-urgency.medium { background: var(--warning-soft); color: var(--warning); }
         .action-urgency.low { background: rgba(134, 239, 172, 0.16); color: #86efac; }
-
-        .disclaimer {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          margin-top: 26px;
-          padding: 14px 16px;
-          border-radius: 14px;
-          border: 1px solid var(--border-color);
-          background: var(--surface-muted);
-          color: var(--text-secondary);
-          font-size: 12px;
-          line-height: 1.6;
-        }
 
         .medication-section {
           margin-top: 22px;
@@ -596,6 +620,7 @@ const ReportCard = ({ data }) => {
         }
 
         @media (max-width: 900px) {
+          .triage-overview-grid,
           .summary-hero,
           .report-grid {
             grid-template-columns: 1fr;

@@ -1,11 +1,14 @@
 import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import { motion as motionLib, AnimatePresence } from 'framer-motion';
-import { Send, Plus, History, Settings, User, Clock, AlertCircle, Menu, X, Mic, MicOff, HeartPulse, Shield, Languages, Camera } from 'lucide-react';
-import AgentPulse from './components/AgentPulse';
+import { Send, Plus, History, Settings, User, Clock, AlertCircle, Menu, X, Mic, MicOff, HeartPulse, Shield, Languages, Camera, Activity, Search, FileText, Eye, CheckCircle, ArrowRightCircle } from 'lucide-react';
 import ReportCard from './components/ReportCard';
 import VisualReportCard from './components/VisualReportCard';
 import DocumentReportCard from './components/DocumentReportCard';
+import SafetyBanner from './components/SafetyBanner';
+import WorkflowTimeline from './components/WorkflowTimeline';
+import UploadDropzone from './components/UploadDropzone';
+import { formatDetectedLanguage } from './lib/clinicalPresentation';
 
 const RAW_API_BASE = (import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:5000/api/v1').replace(/\/$/, '');
 // Ensure /api/v1 is present if not already included in the env variable
@@ -34,11 +37,118 @@ const URGENCY_MARKS = [
   { value: 4, label: '4', hint: 'High' },
   { value: 5, label: '5', hint: 'Severe' },
 ];
-const EXAMPLE_PROMPTS = [
-  'Tight chest pain with sweating and trouble breathing',
-  'High fever and vomiting since this morning',
-  'Headache and dizziness that started after work',
+const DEMO_CASES = [
+  {
+    label: 'Chest pain',
+    symptoms: 'Tight chest pain with sweating and trouble breathing for the last 20 minutes.',
+    notes: 'Symptoms started suddenly. Adult patient.',
+    urgency: 5
+  },
+  {
+    label: 'Fever and headache',
+    symptoms: 'Fever, headache, body aches, and reduced appetite since yesterday evening.',
+    notes: 'No severe breathing difficulty reported.',
+    urgency: 3
+  },
+  {
+    label: 'Skin rash',
+    symptoms: 'Itchy red skin rash on the forearm spreading over the last 2 days.',
+    notes: 'No facial swelling or breathing symptoms reported.',
+    urgency: 2
+  }
 ];
+const ASSESSMENT_MODE_CONFIG = {
+  text: {
+    heroTitle: 'Multi-agent symptom intake built for safe, structured clinical guidance',
+    heroDescription: 'AetherMed translates free-text symptoms into a staged healthcare workflow with visible risk review, research-backed synthesis, and clear next steps.',
+    helperTitle: 'Symptom intake',
+    helperText: 'Best for direct symptom descriptions when you want a judge to see risk review, agent orchestration, and structured recommendations in one flow.',
+    features: [
+      { label: 'Workflow visibility', text: 'Shows how symptoms are analyzed, risk-scored, and converted into safe guidance.' },
+      { label: 'Multilingual context', text: 'Language handling is surfaced throughout the intake and final response.' },
+      { label: 'Clinical framing', text: 'Results are packaged into cards, not one long chatbot paragraph.' }
+    ],
+    loadingTitle: 'AetherMed is reviewing the symptom intake',
+    loadingDescription: 'The system is normalizing the report, assessing urgency, gathering supporting insights, and packaging safe next steps.',
+    submitLabel: 'Generate clinical guidance',
+    disabledMessage: 'Describe symptoms to start the decision-support workflow.'
+  },
+  upload: {
+    heroTitle: 'A single upload path that routes images and documents safely',
+    heroDescription: 'Upload once and let AetherMed determine whether the file looks like a visible symptom, a medical document, or a scan before continuing the safest workflow.',
+    helperTitle: 'Upload assistant',
+    helperText: 'Best for demos where the user is unsure what they captured. The UI shows routing intelligence before the main analysis begins.',
+    features: [
+      { label: 'Auto-routing', text: 'The system identifies the input class before asking for minimal follow-up context.' },
+      { label: 'Safety boundary', text: 'Uploads are guided into the right lane without pretending every image can be diagnosed.' },
+      { label: 'Demo clarity', text: 'Judges can see multimodal capability immediately from the intake screen.' }
+    ],
+    loadingTitle: 'AetherMed is routing the upload safely',
+    loadingDescription: 'The system is identifying the upload, checking risk cues, and packaging the right review path.',
+    submitLabel: 'Continue with routed review',
+    disabledMessage: 'Add an upload to begin the routing workflow.'
+  },
+  visual: {
+    heroTitle: 'Visible symptom review with careful limitations and escalation guidance',
+    heroDescription: 'AetherMed reviews photos of external symptoms, highlights visible findings cautiously, and turns them into safe next actions without claiming a diagnosis.',
+    helperTitle: 'Image review',
+    helperText: 'Best for rashes, swelling, wounds, skin changes, and other visible external findings. Internal imaging stays safety-limited.',
+    features: [
+      { label: 'Visible-only review', text: 'The system clearly separates what is visible from what cannot be confirmed.' },
+      { label: 'Risk-aware output', text: 'Urgency and escalation signs are surfaced as structured sections.' },
+      { label: 'Better uploads', text: 'The intake screen explains exactly what type of image works best.' }
+    ],
+    loadingTitle: 'AetherMed is reviewing the uploaded image',
+    loadingDescription: 'The system is checking image clarity, visible findings, risk cues, and safe next-step language.',
+    submitLabel: 'Analyze image safely',
+    disabledMessage: 'Upload a clear image to enable visual review.'
+  },
+  document: {
+    heroTitle: 'Medical document explanation that preserves the original source of truth',
+    heroDescription: 'AetherMed explains reports in plain language, highlights important warnings, and keeps the original clinic document central to the experience.',
+    helperTitle: 'Document explainer',
+    helperText: 'Best for lab screenshots, discharge notes, prescriptions, and clinic summaries that need a plain-language explanation.',
+    features: [
+      { label: 'Readable summaries', text: 'Dense medical language is translated into clearly separated sections.' },
+      { label: 'Warning surfacing', text: 'Urgent items and follow-up instructions are elevated visually.' },
+      { label: 'Trustworthy framing', text: 'The UI reinforces that the document remains the authoritative source.' }
+    ],
+    loadingTitle: 'AetherMed is interpreting the medical document',
+    loadingDescription: 'The system is reading the source material, extracting important findings, and drafting a safer plain-language explanation.',
+    submitLabel: 'Explain document clearly',
+    disabledMessage: 'Upload a document or paste text to continue.'
+  }
+};
+const WORKFLOW_STEPS = {
+  text: [
+    { id: 'analyze', title: 'Analyzing symptoms', description: 'Normalizing the intake into clinically relevant symptom signals.' },
+    { id: 'risk', title: 'Assessing risk', description: 'Checking severity, urgency, and immediate escalation markers.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Combining structured triage logic with supporting clinical context.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Preparing safe guidance, monitoring advice, and care pathways.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Packaging the response into structured cards for action.' }
+  ],
+  upload: [
+    { id: 'analyze', title: 'Inspecting upload', description: 'Identifying whether the input is a symptom image, document, or scan.' },
+    { id: 'risk', title: 'Assessing risk', description: 'Looking for urgent cues that should shape the safest route.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Aligning the upload with the right internal review workflow.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Preparing the safest explanation and escalation language.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Delivering the routed response in a structured format.' }
+  ],
+  visual: [
+    { id: 'analyze', title: 'Analyzing image', description: 'Reviewing visible features and checking whether the image is usable.' },
+    { id: 'risk', title: 'Assessing risk', description: 'Looking for patterns that may need prompt care or urgent escalation.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Separating visible observations from unsafe diagnostic assumptions.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Drafting safe next steps and warning signs to watch for.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Presenting the visual review as a decision-support summary.' }
+  ],
+  document: [
+    { id: 'analyze', title: 'Reading document', description: 'Extracting readable text and key medical concepts from the source.' },
+    { id: 'risk', title: 'Assessing risk', description: 'Elevating urgent findings, warnings, and time-sensitive instructions.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Turning complex terminology into clear plain-language meaning.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Highlighting follow-up actions and safer explanation framing.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Packaging the explanation into structured document cards.' }
+  ]
+};
 let cachedHealthRequest = null;
 
 function readFileAsDataUrl(file) {
@@ -256,9 +366,9 @@ function App() {
   const agents = ['Translation', 'Triage', 'Research', 'Advice', 'Referral', 'Response'];
   const pageTitles = {
     assessment: {
-      eyebrow: 'Safety-first health guidance',
-      title: 'Choose symptoms, upload assistant, or direct review',
-      description: 'Describe symptoms directly, let the upload assistant route an image for you, or open the dedicated image and document tools.'
+      eyebrow: 'Multi-agent medical decision support',
+      title: 'Structured triage, multimodal intake, and safer next-step guidance',
+      description: 'Choose symptom intake, upload routing, image review, or document explanation and present the workflow as a credible clinical support system.'
     },
     history: {
       eyebrow: 'Past sessions',
@@ -278,6 +388,22 @@ function App() {
       ? 'Backend unavailable'
       : 'Checking backend';
   const urgencyPercent = ((Number(urgency) - 1) / 4) * 100;
+  const currentModeConfig = ASSESSMENT_MODE_CONFIG[assessmentMode];
+  const workflowSteps = WORKFLOW_STEPS[assessmentMode] || WORKFLOW_STEPS.text;
+  const workflowCompletedCount = Math.min(completedAgents.length, workflowSteps.length);
+  const workflowActiveIndex = loading ? Math.min(workflowCompletedCount, workflowSteps.length - 1) : -1;
+  const activeWorkflowInsight = currentInsights[currentInsights.length - 1] || currentModeConfig.loadingDescription;
+  const detectedInterfaceLanguage = typeof navigator !== 'undefined'
+    ? formatDetectedLanguage(navigator.language)
+    : 'English';
+  const hasAssessmentResult = Boolean(report || visualResult || documentResult);
+  const submitDisabledReason = assessmentMode === 'text'
+    ? (!symptoms.trim() ? currentModeConfig.disabledMessage : '')
+    : assessmentMode === 'upload'
+      ? (!uploadAssistantImageDataUrl ? currentModeConfig.disabledMessage : uploadAssistantDetecting ? 'AetherMed is still classifying the upload before you continue.' : '')
+      : assessmentMode === 'visual'
+        ? (!visualImageDataUrl ? currentModeConfig.disabledMessage : '')
+        : ((!documentImageDataUrl && !documentText.trim()) ? currentModeConfig.disabledMessage : '');
 
   useEffect(() => {
     try {
@@ -556,6 +682,19 @@ function App() {
     setLoading(false);
     setShowLogs(false);
     setView('assessment');
+  };
+
+  const handleDemoCaseSelect = (demoCase) => {
+    setAssessmentMode('text');
+    setSymptoms(demoCase.symptoms);
+    setNotes(demoCase.notes);
+    setUrgency(demoCase.urgency);
+    setReport(null);
+    setVisualResult(null);
+    setDocumentResult(null);
+    setError(null);
+    setView('assessment');
+    setIsSidebarOpen(false);
   };
 
   const handleAnalyze = async (e) => {
@@ -1231,7 +1370,7 @@ function App() {
              </MotionDiv>
           )}
 
-          {view === 'assessment' && !report && !visualResult && !documentResult && !loading && (
+          {view === 'assessment' && !hasAssessmentResult && !loading && (
             <MotionDiv 
               className="welcome-box"
               initial={{ opacity: 0, y: 20 }}
@@ -1294,25 +1433,17 @@ function App() {
 
               <div className="hero-panel">
                 <div className="hero-copy">
-                  <span className="section-kicker">Designed for clarity</span>
+                  <span className="section-kicker">Clinical intake</span>
                   <h2 className="hero-title">
                     {assessmentMode === 'upload'
-                      ? 'A simpler upload flow that figures out what you sent'
+                      ? 'Upload once and let AetherMed route it safely'
                       : assessmentMode === 'visual'
-                      ? 'A calmer way to review visible symptoms from a photo'
-                      : assessmentMode === 'document'
-                        ? 'A calmer way to explain a medical document in plain language'
-                        : 'A calmer way to explain symptoms and get structured guidance'}
+                        ? 'Submit a clear photo for visible symptom review'
+                        : assessmentMode === 'document'
+                          ? 'Upload a document for plain-language explanation'
+                          : 'Describe symptoms to begin the assessment'}
                   </h2>
-                  <p className="hero-text">
-                    {assessmentMode === 'upload'
-                      ? 'Upload an image once. AetherMed will identify whether it looks like a symptom photo, a medical report, or a scan, ask for only a little extra context, and route it to the right safe workflow.'
-                      : assessmentMode === 'visual'
-                      ? 'Upload a clear photo of a visible skin or body issue. AetherMed will describe only what is visible, list broad concerns, and suggest safe next steps without claiming a diagnosis.'
-                      : assessmentMode === 'document'
-                        ? 'Upload a screenshot or photo of a report, or paste the document text. AetherMed will explain the wording simply, highlight anything urgent, and keep the original report as the source of truth.'
-                        : 'Start with your own words. AetherMed turns what you say into a simple urgency summary, suggested next steps, and a care path you can actually act on.'}
-                  </p>
+                  <p className="hero-text">{currentModeConfig.helperText}</p>
                 </div>
 
                 <div className="trust-strip">
@@ -1324,34 +1455,32 @@ function App() {
                     </div>
                   </div>
                   <div className="trust-card">
-                    <HeartPulse size={18} />
+                    <Activity size={18} />
                     <div>
-                      <strong>{assessmentMode === 'upload' ? 'One upload path' : assessmentMode === 'visual' ? 'Visible issues only' : assessmentMode === 'document' ? 'Report-focused' : 'Action-focused'}</strong>
-                      <span>{assessmentMode === 'upload' ? 'Best when you are not sure whether the upload is a symptom photo, medical report, or scan.' : assessmentMode === 'visual' ? 'Best for rashes, swelling, wounds, discoloration, and other external changes.' : assessmentMode === 'document' ? 'Best for diagnosis notes, lab screenshots, prescriptions, and clinic summaries.' : 'You get next steps, urgency, and a care path in one view.'}</span>
+                      <strong>Visible workflow</strong>
+                      <span>The UI shows symptom analysis, risk review, insight gathering, recommendations, and next steps as separate stages.</span>
                     </div>
                   </div>
                   <div className="trust-card">
-                    {assessmentMode === 'upload' || assessmentMode === 'visual' || assessmentMode === 'document' ? <AlertCircle size={18} /> : <Languages size={18} />}
+                    <FileText size={18} />
                     <div>
-                      <strong>{assessmentMode === 'upload' ? 'Minimal extra context' : assessmentMode === 'visual' ? 'Careful limitations' : assessmentMode === 'document' ? 'Keeps the source of truth' : 'Multilingual intake'}</strong>
-                      <span>{assessmentMode === 'upload' ? 'After detection, AetherMed asks only one small follow-up question before routing the file.' : assessmentMode === 'visual' ? 'Not for X-rays, scans, or hidden/internal problems. Unclear photos are flagged clearly.' : assessmentMode === 'document' ? 'It explains the existing document and flags unclear or urgent items without rewriting the report.' : 'Users can describe symptoms naturally before review is normalized.'}</span>
+                      <strong>Structured output</strong>
+                      <span>Results are organized into clinical cards for risk, findings, safe guidance, and recommended next steps.</span>
                     </div>
                   </div>
                 </div>
 
                 {assessmentMode === 'text' ? (
                   <div className="example-prompts">
-                    {EXAMPLE_PROMPTS.map((example) => (
+                    {DEMO_CASES.map((demoCase) => (
                       <button
-                        key={example}
+                        key={demoCase.label}
                         type="button"
                         className="example-chip"
-                        onClick={() => {
-                          setSymptoms(example);
-                          setView('assessment');
-                        }}
+                        onClick={() => handleDemoCaseSelect(demoCase)}
                       >
-                        {example}
+                        <strong>{demoCase.label}</strong>
+                        <span>Load sample case</span>
                       </button>
                     ))}
                   </div>
@@ -1371,7 +1500,25 @@ function App() {
                     <span>Use a straight, well-lit screenshot or photo, or paste the exact report text if you have it. Crop out unrelated content when possible.</span>
                   </div>
                 )}
+
+                <div className="hero-workflow-preview">
+                  <WorkflowTimeline
+                    preview
+                    title="AetherMed clinical review pipeline"
+                    description="The interface exposes the internal review logic before any response is generated, so the product feels like a real decision-support system."
+                    steps={workflowSteps}
+                    activeInsight="The staged workflow gives judges a clear sense of intelligence, orchestration, and safety boundaries."
+                    agents={agents}
+                    completedAgents={[]}
+                  />
+                </div>
               </div>
+
+              <SafetyBanner
+                title="AetherMed provides decision support and triage guidance, not a medical diagnosis"
+                message="If symptoms are severe, rapidly worsening, or life-threatening, seek emergency care immediately instead of waiting for an AI response."
+                tone="warning"
+              />
 
               {assessmentMode === 'text' ? (
                 <form onSubmit={handleAnalyze} className="input-group glass">
@@ -1455,27 +1602,26 @@ function App() {
                     />
                   </div>
 
-                  <button type="submit" disabled={!symptoms.trim() || loading}>
-                    {loading ? 'Reviewing symptoms...' : <><Send size={18} /> Get Guidance</>}
+                  <button type="submit" disabled={!symptoms.trim() || loading} className="primary-submit">
+                    {loading ? 'Reviewing symptoms...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
                   </button>
                   <div className="support-note">
-                    If symptoms feel life-threatening, skip this tool and call local emergency services immediately.
+                    {submitDisabledReason || 'If symptoms feel life-threatening, skip this tool and call local emergency services immediately.'}
                   </div>
                 </form>
               ) : assessmentMode === 'upload' ? (
                 <form onSubmit={handleUploadAssistantAnalyze} className="input-group glass">
                   <div className="form-field">
                     <label>Upload a file or image</label>
-                    <label className="image-upload-box">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleUploadAssistantImageChange}
-                      />
-                      <strong>Choose a photo, screenshot, or camera capture</strong>
-                      <span>Use this when you are not sure whether the upload is a symptom image, medical report, or scan. JPG, PNG, or HEIC up to {MAX_UPLOAD_ASSISTANT_IMAGE_SIZE_MB} MB.</span>
-                    </label>
+                    <UploadDropzone
+                      icon="upload"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleUploadAssistantImageChange}
+                      title="Choose a photo, screenshot, or camera capture"
+                      description={`Use this when you are not sure whether the upload is a symptom image, medical report, or scan. JPG, PNG, or HEIC up to ${MAX_UPLOAD_ASSISTANT_IMAGE_SIZE_MB} MB.`}
+                      helperItems={['Auto-detect input type', 'One follow-up question', 'Safety-first routing']}
+                    />
                     <div className="profile-actions" style={{ marginTop: '10px' }}>
                       <button type="button" className="profile-action-btn" onClick={() => openDirectCamera('upload')}>
                         <Camera size={16} /> Scan with camera
@@ -1530,27 +1676,26 @@ function App() {
                     </div>
                   )}
 
-                  <button type="submit" disabled={!uploadAssistantImageDataUrl || uploadAssistantDetecting || loading}>
-                    {loading ? 'Routing upload...' : <><Send size={18} /> Continue With Upload</>}
+                  <button type="submit" disabled={!uploadAssistantImageDataUrl || uploadAssistantDetecting || loading} className="primary-submit">
+                    {loading ? 'Routing upload...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
                   </button>
                   <div className="support-note">
-                    If the upload relates to severe chest pain, breathing trouble, heavy bleeding, stroke symptoms, or rapidly worsening illness, seek urgent medical care immediately.
+                    {submitDisabledReason || 'If the upload relates to severe chest pain, breathing trouble, heavy bleeding, stroke symptoms, or rapidly worsening illness, seek urgent medical care immediately.'}
                   </div>
                 </form>
               ) : assessmentMode === 'visual' ? (
                 <form onSubmit={handleVisualAnalyze} className="input-group glass">
                   <div className="form-field">
                     <label>Upload or capture an image</label>
-                    <label className="image-upload-box">
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleVisualImageChange}
-                      />
-                      <strong>Choose a photo or use your camera</strong>
-                      <span>JPG, PNG, or HEIC up to {MAX_VISUAL_IMAGE_SIZE_MB} MB. Best for rashes, swelling, wounds, and visible skin changes.</span>
-                    </label>
+                    <UploadDropzone
+                      icon="image"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleVisualImageChange}
+                      title="Choose a photo or use your camera"
+                      description={`JPG, PNG, or HEIC up to ${MAX_VISUAL_IMAGE_SIZE_MB} MB. Best for rashes, swelling, wounds, and visible skin changes.`}
+                      helperItems={['Bright light', 'Full affected area', 'Avoid blurry photos']}
+                    />
                     <div className="profile-actions" style={{ marginTop: '10px' }}>
                       <button type="button" className="profile-action-btn" onClick={() => openDirectCamera('visual')}>
                         <Camera size={16} /> Scan directly with camera
@@ -1589,26 +1734,25 @@ function App() {
                     )}
                   </div>
 
-                  <button type="submit" disabled={!visualImageDataUrl || loading}>
-                    {loading ? 'Reviewing image...' : <><Send size={18} /> Analyze Image</>}
+                  <button type="submit" disabled={!visualImageDataUrl || loading} className="primary-submit">
+                    {loading ? 'Reviewing image...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
                   </button>
                   <div className="support-note">
-                    If there is trouble breathing, severe pain, rapidly spreading swelling, heavy bleeding, or facial involvement, seek urgent medical care immediately.
+                    {submitDisabledReason || 'If there is trouble breathing, severe pain, rapidly spreading swelling, heavy bleeding, or facial involvement, seek urgent medical care immediately.'}
                   </div>
                 </form>
               ) : (
                 <form onSubmit={handleDocumentAnalyze} className="input-group glass">
                   <div className="form-field">
                     <label>Upload a document screenshot or photo</label>
-                    <label className="image-upload-box">
-                      <input
-                        type="file"
-                        accept="image/*,.pdf,.txt,.md,.json,application/pdf,text/plain,application/json"
-                        onChange={handleDocumentImageChange}
-                      />
-                      <strong>Choose a screenshot, PDF, or text-based report</strong>
-                      <span>Images up to {MAX_DOCUMENT_IMAGE_SIZE_MB} MB, text files up to {MAX_DOCUMENT_TEXT_FILE_SIZE_MB} MB, plus PDF reports with extractable text.</span>
-                    </label>
+                    <UploadDropzone
+                      icon="document"
+                      accept="image/*,.pdf,.txt,.md,.json,application/pdf,text/plain,application/json"
+                      onChange={handleDocumentImageChange}
+                      title="Choose a screenshot, PDF, or text-based report"
+                      description={`Images up to ${MAX_DOCUMENT_IMAGE_SIZE_MB} MB, text files up to ${MAX_DOCUMENT_TEXT_FILE_SIZE_MB} MB, plus PDF reports with extractable text.`}
+                      helperItems={['Lab reports', 'Discharge notes', 'Prescription instructions']}
+                    />
                     <div className="form-note">
                       This mode explains medical documents in simpler language. It does not replace the original report or give a new diagnosis.
                     </div>
@@ -1652,11 +1796,11 @@ function App() {
                     )}
                   </div>
 
-                  <button type="submit" disabled={(!documentImageDataUrl && !documentText.trim()) || loading}>
-                    {loading ? 'Explaining document...' : <><Send size={18} /> Explain Document</>}
+                  <button type="submit" disabled={(!documentImageDataUrl && !documentText.trim()) || loading} className="primary-submit">
+                    {loading ? 'Explaining document...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
                   </button>
                   <div className="support-note">
-                    If the document says emergency, critical, urgent referral, or severe abnormal findings, contact the issuing clinic or seek medical care promptly.
+                    {submitDisabledReason || 'If the document says emergency, critical, urgent referral, or severe abnormal findings, contact the issuing clinic or seek medical care promptly.'}
                   </div>
                 </form>
               )}
@@ -1666,35 +1810,60 @@ function App() {
           {view === 'assessment' && loading && (
             <div className="orchestrator-view glass">
               <div className="view-header">
-                <h3>{assessmentMode === 'upload' ? 'Routing your upload' : assessmentMode === 'visual' ? 'Reviewing your image' : assessmentMode === 'document' ? 'Explaining your medical document' : 'Reviewing your symptoms'}</h3>
+                <h3>{currentModeConfig.loadingTitle}</h3>
                 <div className="status-badge pulse-active">In progress</div>
               </div>
-              <p className="loading-copy">
-                {assessmentMode === 'upload'
-                  ? 'We are routing the upload to the right internal path, keeping the experience simple and safety-first.'
-                  : assessmentMode === 'visual'
-                  ? 'We are reviewing only visible features in the image, listing broad concerns, and preparing cautious safety guidance.'
-                  : assessmentMode === 'document'
-                    ? 'We are reading the uploaded medical document, simplifying the wording, and highlighting any urgent follow-up mentioned in the report.'
-                    : 'We are organizing your intake into a clearer urgency summary, practical next steps, and a care path.'}
-              </p>
-              {assessmentMode === 'upload' || assessmentMode === 'visual' || assessmentMode === 'document' ? (
-                <div className="visual-loading-card">
-                  <strong>{activeAgent || (assessmentMode === 'upload' ? 'Upload Assistant' : assessmentMode === 'document' ? 'Medical Document Assistant' : 'Visual Assessment')}</strong>
-                  <p>{currentInsights[currentInsights.length - 1] || (assessmentMode === 'upload' ? 'Identifying the upload type, keeping the explanation supportive, and routing it to the safest workflow.' : assessmentMode === 'document' ? 'Checking readability, medical terms, and whether the document mentions anything urgent.' : 'Checking image clarity, visible changes, and practical safety next steps.')}</p>
+              <p className="loading-copy">{currentModeConfig.loadingDescription}</p>
+
+              <div className="loading-intelligence-panel">
+                <div className="loading-hero-summary">
+                  <span className="section-kicker">Judge-ready clinical UX</span>
+                  <h4>{currentModeConfig.heroTitle}</h4>
+                  <p>{currentModeConfig.heroDescription}</p>
                 </div>
-              ) : (
-                <div className="agent-stack">
-                  {agents.map(agent => (
-                    <AgentPulse 
-                      key={agent}
-                      name={agent}
-                      active={activeAgent === agent}
-                      complete={completedAgents.includes(agent)}
-                    />
-                  ))}
+
+                <div className="hero-signal-row loading-visible">
+                  <span className={`engine-pill ${systemStatus.state}`}>{engineLabel}</span>
+                  <span className="hero-signal-chip"><Languages size={14} /> Detected language: {detectedInterfaceLanguage}</span>
+                  <span className="hero-signal-chip"><HeartPulse size={14} /> Multimodal review ready</span>
                 </div>
-              )}
+
+                <div className="trust-strip loading-visible">
+                  <div className="trust-card">
+                    <Shield size={18} />
+                    <div>
+                      <strong>Safety-first</strong>
+                      <span>Built to escalate red flags, not guess diagnoses.</span>
+                    </div>
+                  </div>
+                  <div className="trust-card">
+                    <Activity size={18} />
+                    <div>
+                      <strong>Visible workflow</strong>
+                      <span>The UI shows symptom analysis, risk review, insight gathering, recommendations, and next steps as separate stages.</span>
+                    </div>
+                  </div>
+                  <div className="trust-card">
+                    <FileText size={18} />
+                    <div>
+                      <strong>Structured output</strong>
+                      <span>Results are organized into clinical cards for risk, findings, safe guidance, and recommended next steps.</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <WorkflowTimeline
+                title={currentModeConfig.loadingTitle}
+                description={currentModeConfig.loadingDescription}
+                steps={workflowSteps}
+                activeIndex={workflowActiveIndex}
+                completedCount={workflowCompletedCount}
+                activeAgent={activeAgent}
+                activeInsight={activeWorkflowInsight}
+                agents={agents}
+                completedAgents={completedAgents}
+              />
 
               <div style={{ marginTop: '24px', textAlign: 'center' }}>
                   <button className="reset-btn" style={{ fontSize: '12px' }} onClick={() => setShowLogs(!showLogs)}>
@@ -1726,11 +1895,14 @@ function App() {
           {error && (
             <div className="error-box glass">
               <AlertCircle size={24} color="var(--danger)" />
-              <p>{error}</p>
+              <div className="error-box-copy">
+                <strong>We could not complete the review</strong>
+                <p>{error}</p>
+              </div>
             </div>
           )}
 
-          {view === 'assessment' && (report || visualResult || documentResult) && (
+          {view === 'assessment' && hasAssessmentResult && (
             <div className="results-container">
               {report ? <ReportCard data={report} /> : visualResult ? <VisualReportCard data={visualResult} /> : <DocumentReportCard data={documentResult} />}
               <button className="reset-btn" onClick={() => { setReport(null); setVisualResult(null); setDocumentResult(null); }}>
@@ -2045,6 +2217,30 @@ function App() {
           pointer-events: none;
         }
         .hero-copy { max-width: 64ch; }
+        .hero-signal-row {
+          display: none;
+          flex-wrap: wrap;
+          gap: 10px;
+          margin-bottom: 20px;
+          position: relative;
+          z-index: 1;
+        }
+        .hero-signal-row.loading-visible {
+          display: flex;
+        }
+        .hero-signal-chip {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          min-height: 34px;
+          padding: 7px 12px;
+          border-radius: 999px;
+          border: 1px solid var(--border-color);
+          background: var(--surface-muted);
+          color: var(--text-secondary);
+          font-size: 12px;
+          font-weight: 700;
+        }
         .hero-title {
           font-size: clamp(1.7rem, 3vw, 2.4rem);
           line-height: 1.1;
@@ -2059,10 +2255,14 @@ function App() {
           font-size: 1rem;
         }
         .trust-strip {
-          display: grid;
+          display: none;
           grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 14px;
           margin-top: 24px;
+        }
+        .trust-strip.loading-visible {
+          display: grid;
+          margin-top: 0;
         }
         .trust-card {
           background: var(--surface-muted);
@@ -2091,8 +2291,8 @@ function App() {
           line-height: 1.5;
         }
         .example-prompts {
-          display: flex;
-          flex-wrap: wrap;
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
           gap: 10px;
           margin-top: 22px;
         }
@@ -2113,17 +2313,56 @@ function App() {
         }
         .example-chip {
           border: 1px solid var(--border-color);
-          background: transparent;
+          background: var(--surface-muted);
           color: var(--text-secondary);
-          padding: 10px 14px;
-          border-radius: 999px;
+          padding: 14px;
+          border-radius: 18px;
           cursor: pointer;
           transition: all 0.2s ease;
+          text-align: left;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
         }
         .example-chip:hover {
           background: var(--surface-soft);
           color: var(--text-primary);
           border-color: color-mix(in srgb, var(--primary) 35%, var(--border-color));
+        }
+        .example-chip strong {
+          color: var(--text-primary);
+          font-size: 14px;
+        }
+        .example-chip span {
+          font-size: 12px;
+          line-height: 1.55;
+          color: var(--text-secondary);
+        }
+        .hero-workflow-preview {
+          display: none;
+        }
+        .loading-intelligence-panel {
+          display: flex;
+          flex-direction: column;
+          gap: 18px;
+          margin-bottom: 20px;
+        }
+        .loading-hero-summary {
+          padding: 18px;
+          border-radius: 18px;
+          border: 1px solid var(--border-color);
+          background: linear-gradient(160deg, color-mix(in srgb, var(--surface-soft) 72%, transparent), var(--surface-muted));
+        }
+        .loading-hero-summary h4 {
+          margin: 0 0 8px;
+          color: var(--text-primary);
+          font-size: 1.15rem;
+          line-height: 1.3;
+        }
+        .loading-hero-summary p {
+          margin: 0;
+          color: var(--text-secondary);
+          line-height: 1.65;
         }
 
         .input-group {
@@ -2140,6 +2379,12 @@ function App() {
 
         .form-row { display: flex; gap: 20px; }
         .form-field { display: flex; flex-direction: column; gap: 10px; flex: 1; }
+        .field-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 12px;
+        }
         .form-field label {
           font-size: 12px;
           font-weight: 700;
@@ -2411,7 +2656,7 @@ function App() {
         }
 
         .orchestrator-view {
-          max-width: 720px;
+          max-width: 960px;
           width: 100%;
           padding: clamp(20px, 5vw, 32px);
           border-top: 3px solid var(--primary);
@@ -2455,6 +2700,13 @@ function App() {
           color: var(--text-secondary);
           line-height: 1.6;
         }
+        .visual-loading-card.ready-state {
+          border-color: color-mix(in srgb, var(--success) 28%, var(--border-color));
+          background: color-mix(in srgb, var(--success-soft) 42%, var(--surface-muted));
+        }
+        .inline-support-copy {
+          margin-top: 8px !important;
+        }
 
         .results-container { width: 100%; display: flex; flex-direction: column; align-items: center; padding-bottom: 40px; }
         .error-box {
@@ -2467,6 +2719,11 @@ function App() {
           border-left: 4px solid var(--danger);
           color: var(--text-secondary);
           background: var(--danger-soft);
+        }
+        .error-box-copy strong {
+          display: block;
+          color: var(--text-primary);
+          margin-bottom: 6px;
         }
         .error-box p {
           margin: 0;
@@ -2537,6 +2794,7 @@ function App() {
 
         @media (max-width: 900px) {
           .trust-strip { grid-template-columns: 1fr; }
+          .example-prompts { grid-template-columns: 1fr; }
         }
 
         @media (max-width: 1024px) {

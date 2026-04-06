@@ -80,6 +80,88 @@ The upload assistant:
 
 It also includes a direct camera capture button so users can scan or photograph something immediately without needing an existing file on the device.
 
+## Architecture
+
+AetherMed AI uses a unified multi-agent system designed for both direct user interaction and Agent-to-Agent (A2A) automation.
+
+```mermaid
+graph TD
+    subgraph "AetherMed Frontend (Vite + React)"
+        UI[User Interface / App.jsx]
+        LS[(Local Storage)]
+        UI -- "Persistence" --> LS
+    end
+
+    subgraph "Networking Layer"
+        REST[REST API / Axios]
+        A2A_NET[A2A JSON-RPC / HTTP]
+    end
+
+    subgraph "AetherMed Backend (Express)"
+        SVR[server.js]
+        
+        subgraph "Internal Engines"
+            ORC[orchestrator.js]
+            POA[promptOpinionAgent.js]
+        end
+
+        subgraph "AI Agents"
+            direction TB
+            TA[Triage]
+            RA[Research]
+            AA[Advice]
+            REF[Referral]
+            RES[Response]
+            VSA[Visual]
+            MDA[Document]
+        end
+
+        subgraph "Utilities"
+            OAI[openaiService.js]
+            RT[runtime.js]
+        end
+    end
+
+    subgraph "External Cloud Services"
+        OAPI[OpenAI API]
+        PO[PromptOpinion Platform]
+        DB[MongoDB Atlas]
+    end
+
+    UI -- "Action" --> REST
+    REST -- "POST Requests" --> SVR
+
+    SVR -- "Persistence" --> DB
+    A2A_NET -- "A2A Tasks" --> SVR
+    PO -- "JSON-RPC Protocol" --> A2A_NET
+
+    SVR -- "Standard Flow" --> ORC
+    SVR -- "Direct A2A" --> POA
+    ORC -- "Sequential Agents" --> TA
+    TA --> RA
+    RA --> AA
+    AA --> REF
+    REF --> RES
+    
+    POA & VSA & MDA & TA & RA & AA -- "Model Input" --> OAI
+    OAI -- "API Requests" --> OAPI
+```
+
+## PromptOpinion A2A Integration
+
+AetherMed is fully compatible with the **PromptOpinion Agent-to-Agent (A2A)** protocol. This allows the AetherMed Master Agent to be called by other specialized agents within the PromptOpinion ecosystem.
+
+- **A2A Endpoint**: `POST /` (JSON-RPC 2.0)
+- **Protocol Version**: `0.3.0`
+- **Security**: Optional `X-API-Key` authentication.
+- **Discovery**: Agent capabilities are described at `/.well-known/agent-card.json`.
+
+### Supported A2A Skills
+- `symptom-triage`: Safety-first clinical guidance and next steps.
+- `visible-symptom-review`: Review of rashes, wounds, and body concerns.
+- `medical-document-explainer`: Simple explanations for reports and prescriptions.
+- `medical-imaging-safety-guidance`: Radiograph/X-ray intake with non-diagnostic safety-first messaging.
+
 ## Tech Stack
 
 - Frontend: React + Vite
@@ -97,7 +179,13 @@ OPENAI_API_KEY=your_openai_api_key_here
 OPENAI_MODEL=gpt-5-mini
 OPENAI_VISION_MODEL=gpt-4.1-mini
 AETHERMED_AGENT_MODE=auto
-ALLOWED_ORIGINS=http://localhost:5173,http://127.0.0.1:5173
+ALLOWED_ORIGINS=http://localhost:5173,https://aether-med-agentic.vercel.app
+
+# PromptOpinion A2A Configuration
+# Set your public URL (e.g. Render URL)
+PROMPT_OPINION_AGENT_URL=https://your-app.onrender.com
+# Set a secret key for A2A security (optional but recommended)
+PROMPT_OPINION_API_KEY=your_a2a_secret_here
 MONGODB_URI=
 ```
 

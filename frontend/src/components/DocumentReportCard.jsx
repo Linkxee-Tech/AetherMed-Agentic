@@ -1,7 +1,10 @@
 import React from 'react';
 import { motion as motionLib } from 'framer-motion';
-import { FileText, Search, Info, AlertCircle, ArrowRightCircle, ShieldAlert } from 'lucide-react';
+import { FileText, Search, Info, AlertCircle, ArrowRightCircle, Languages } from 'lucide-react';
 import MultimodalSummaryCard from './MultimodalSummaryCard';
+import RiskBadge from './RiskBadge';
+import SafetyBanner from './SafetyBanner';
+import { formatDetectedLanguage, getRiskTheme } from '../lib/clinicalPresentation';
 
 const MotionDiv = motionLib.div;
 
@@ -30,8 +33,11 @@ const DocumentReportCard = ({ data }) => {
 
   const readability = data.readability || 'partial';
   const readabilityLabel = readabilityLabels[readability] || readabilityLabels.partial;
+  const fallbackRisk = Array.isArray(data.importantWarningSigns) && data.importantWarningSigns.length > 0 ? 'High' : 'Moderate';
+  const riskTheme = getRiskTheme(data.multimodalSummary?.riskLevel || fallbackRisk);
   const currentColor = readabilityColors[readability] || readabilityColors.partial;
   const hasWarnings = Array.isArray(data.importantWarningSigns) && data.importantWarningSigns.length > 0;
+  const detectedLanguage = formatDetectedLanguage(data.detectedLanguage || data.multimodalSummary?.detectedLanguage);
 
   return (
     <MotionDiv
@@ -42,11 +48,12 @@ const DocumentReportCard = ({ data }) => {
     >
       <div className="report-header">
         <div className="badge-row">
+          <RiskBadge level={riskTheme.key} />
           <div className="type-badge">{data.documentType || 'Medical document'}</div>
           <div className="readability-badge" style={{ backgroundColor: `${currentColor}1f`, color: currentColor }}>
             {readabilityLabel}
           </div>
-          <div className="meta-badge">Language: {data.detectedLanguage || 'English'}</div>
+          <div className="meta-badge"><Languages size={14} /> {detectedLanguage}</div>
         </div>
         <h2>Medical document explanation</h2>
         <p className="timestamp">Generated {new Date().toLocaleString()}</p>
@@ -58,6 +65,24 @@ const DocumentReportCard = ({ data }) => {
         <span className="summary-kicker">Final user-friendly explanation</span>
         <h3>{data.finalExplanation || 'Use the sections below as a plain-language explanation of the uploaded medical document.'}</h3>
         <p>This explanation keeps the original document as the source of truth and does not replace your doctor, clinic, or pharmacist.</p>
+      </div>
+
+      <div className="document-overview-grid">
+        <div className="overview-card">
+          <span className="summary-kicker">Document type</span>
+          <strong>{data.documentType || 'Medical document'}</strong>
+          <span>The system preserves the source material while simplifying its meaning.</span>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Risk emphasis</span>
+          <strong style={{ color: riskTheme.accent }}>{riskTheme.label} risk</strong>
+          <span>Warnings and follow-up instructions are surfaced in a separate section for safer review.</span>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Detected language</span>
+          <strong>{detectedLanguage}</strong>
+          <span>Language context is visible so multilingual intake feels deliberate and clinical.</span>
+        </div>
       </div>
 
       <div className="section-grid">
@@ -94,10 +119,12 @@ const DocumentReportCard = ({ data }) => {
         </section>
       </div>
 
-      <div className="disclaimer">
-        <ShieldAlert size={16} />
-        <span>This is a medical document explanation tool for demonstration purposes only. It does not replace the original report, professional medical advice, or emergency care.</span>
-      </div>
+      <SafetyBanner
+        compact
+        tone={riskTheme.key === 'EMERGENCY' ? 'urgent' : 'warning'}
+        title="AetherMed explains documents, not diagnoses"
+        message="This is a medical document explanation tool for demonstration purposes only. It does not replace the original report, professional medical advice, or emergency care."
+      />
 
       <style>{`
         .document-report-card {
@@ -105,7 +132,7 @@ const DocumentReportCard = ({ data }) => {
           margin-top: 12px;
           max-width: 960px;
           width: 100%;
-          border-top: 4px solid var(--primary);
+          border-top: 4px solid ${riskTheme.accent};
         }
 
         .report-header {
@@ -126,6 +153,7 @@ const DocumentReportCard = ({ data }) => {
         .meta-badge {
           display: inline-flex;
           align-items: center;
+          gap: 8px;
           min-height: 32px;
           padding: 6px 12px;
           border-radius: 999px;
@@ -184,6 +212,34 @@ const DocumentReportCard = ({ data }) => {
           line-height: 1.65;
         }
 
+        .document-overview-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 22px;
+        }
+
+        .overview-card {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 16px;
+          border-radius: 18px;
+          border: 1px solid var(--border-color);
+          background: var(--surface-muted);
+        }
+
+        .overview-card strong {
+          color: var(--text-primary);
+          line-height: 1.45;
+        }
+
+        .overview-card span:last-child {
+          color: var(--text-secondary);
+          line-height: 1.6;
+          font-size: 13px;
+        }
+
         .section-grid {
           display: grid;
           grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -240,21 +296,8 @@ const DocumentReportCard = ({ data }) => {
           background: color-mix(in srgb, var(--danger-soft) 70%, var(--surface-strong));
         }
 
-        .disclaimer {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          margin-top: 24px;
-          padding: 14px 16px;
-          border-radius: 14px;
-          border: 1px solid var(--border-color);
-          background: var(--surface-muted);
-          color: var(--text-secondary);
-          font-size: 12px;
-          line-height: 1.6;
-        }
-
         @media (max-width: 900px) {
+          .document-overview-grid,
           .section-grid {
             grid-template-columns: 1fr;
           }

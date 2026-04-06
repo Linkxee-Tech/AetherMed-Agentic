@@ -1,7 +1,10 @@
 import React from 'react';
 import { motion as motionLib } from 'framer-motion';
-import { Eye, Info, CheckCircle, AlertCircle, ShieldAlert, ArrowRightCircle } from 'lucide-react';
+import { Eye, Info, CheckCircle, AlertCircle, ArrowRightCircle, Languages } from 'lucide-react';
 import MultimodalSummaryCard from './MultimodalSummaryCard';
+import RiskBadge from './RiskBadge';
+import SafetyBanner from './SafetyBanner';
+import { formatDetectedLanguage, getRiskTheme } from '../lib/clinicalPresentation';
 
 const MotionDiv = motionLib.div;
 
@@ -18,12 +21,6 @@ function renderList(items, fallback) {
   ));
 }
 
-const safetyColors = {
-  Low: '#86efac',
-  Moderate: '#facc15',
-  High: '#f87171'
-};
-
 const qualityLabels = {
   clear: 'Image clear enough to review',
   unclear: 'Image unclear',
@@ -33,11 +30,13 @@ const qualityLabels = {
 const VisualReportCard = ({ data }) => {
   if (!data) return null;
 
-  const safetyLevel = data.safetyLevel || 'Moderate';
-  const currentColor = safetyColors[safetyLevel] || safetyColors.Moderate;
+  const safetyLevel = data.multimodalSummary?.riskLevel || data.safetyLevel || 'Moderate';
+  const riskTheme = getRiskTheme(safetyLevel);
+  const currentColor = riskTheme.accent;
   const imageQuality = data.imageQuality || 'unclear';
   const qualityLabel = qualityLabels[imageQuality] || qualityLabels.unclear;
   const isMedicalImaging = data.reviewMode === 'medical_imaging';
+  const detectedLanguage = formatDetectedLanguage(data.detectedLanguage || data.multimodalSummary?.detectedLanguage);
 
   return (
     <MotionDiv
@@ -48,12 +47,10 @@ const VisualReportCard = ({ data }) => {
     >
       <div className="report-header">
         <div className="badge-row">
-          <div className="safety-badge" style={{ backgroundColor: `${currentColor}1f`, color: currentColor }}>
-            Safety level: {safetyLevel}
-          </div>
+          <RiskBadge level={safetyLevel} suffix="risk" />
           <div className="quality-badge">{isMedicalImaging ? 'Medical imaging upload' : 'Visible symptom photo'}</div>
           <div className="quality-badge">{qualityLabel}</div>
-          <div className="quality-badge">Language: {data.detectedLanguage || 'English'}</div>
+          <div className="quality-badge"><Languages size={14} /> {detectedLanguage}</div>
         </div>
         <h2>{isMedicalImaging ? 'Medical imaging safe response' : 'Visual symptom assistant'}</h2>
         <p className="timestamp">Generated {new Date().toLocaleString()}</p>
@@ -65,6 +62,24 @@ const VisualReportCard = ({ data }) => {
         <span className="summary-kicker">{isMedicalImaging ? 'Final safe response' : 'Final short response'}</span>
         <h3>{(isMedicalImaging ? data.finalSafeResponse : data.finalShortResponse) || 'Please use the details below as a cautious visual review only.'}</h3>
         <p>{isMedicalImaging ? 'This response acknowledges the uploaded medical imaging but does not diagnose or replace professional review.' : 'This review is limited to visible features in the uploaded image and does not provide a diagnosis.'}</p>
+      </div>
+
+      <div className="visual-overview-grid">
+        <div className="overview-card">
+          <span className="summary-kicker">Review scope</span>
+          <strong>{isMedicalImaging ? 'Safety-limited imaging acknowledgment' : 'Visible external symptom review'}</strong>
+          <span>{isMedicalImaging ? 'The system explains what can and cannot be said safely from a scan image.' : 'The system focuses only on what is visibly present in the uploaded photo.'}</span>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Risk level</span>
+          <strong style={{ color: currentColor }}>{riskTheme.label} risk</strong>
+          <span>Visual findings are translated into cautious safety guidance and escalation cues.</span>
+        </div>
+        <div className="overview-card">
+          <span className="summary-kicker">Detected language</span>
+          <strong>{detectedLanguage}</strong>
+          <span>Language context is surfaced so the response feels purpose-built for multilingual triage.</span>
+        </div>
       </div>
 
       {isMedicalImaging ? (
@@ -80,7 +95,7 @@ const VisualReportCard = ({ data }) => {
           </section>
 
           <section className="report-section">
-            <h3><ShieldAlert size={18} /> 3. What cannot be confirmed</h3>
+            <h3><AlertCircle size={18} /> 3. What cannot be confirmed</h3>
             <p>{data.whatCannotBeConfirmed || 'A medical diagnosis cannot be confirmed from the image alone here.'}</p>
           </section>
 
@@ -107,9 +122,9 @@ const VisualReportCard = ({ data }) => {
           </section>
 
           <section className="report-section">
-            <h3><ShieldAlert size={18} /> 3. Safety level</h3>
+            <h3><AlertCircle size={18} /> 3. Safety level</h3>
             <div className="safety-panel" style={{ borderColor: `${currentColor}55` }}>
-              <strong style={{ color: currentColor }}>{safetyLevel}</strong>
+              <strong style={{ color: currentColor }}>{riskTheme.label}</strong>
               <span>{qualityLabel}</span>
             </div>
           </section>
@@ -131,10 +146,12 @@ const VisualReportCard = ({ data }) => {
         </div>
       )}
 
-      <div className="disclaimer">
-        <ShieldAlert size={16} />
-        <span>{isMedicalImaging ? 'This is a safety-limited response to an uploaded medical imaging file for demonstration purposes only. It does not replace a radiologist, doctor, formal report, or emergency care.' : 'This is a visual review of an uploaded image for demonstration purposes only. It does not replace professional medical care or emergency services.'}</span>
-      </div>
+      <SafetyBanner
+        compact
+        tone={riskTheme.key === 'EMERGENCY' ? 'urgent' : 'warning'}
+        title="AetherMed does not diagnose from images"
+        message={isMedicalImaging ? 'This is a safety-limited response to an uploaded medical imaging file for demonstration purposes only. It does not replace a radiologist, doctor, formal report, or emergency care.' : 'This is a visual review of an uploaded image for demonstration purposes only. It does not replace professional medical care or emergency services.'}
+      />
 
       <style>{`
         .visual-report-card {
@@ -142,7 +159,7 @@ const VisualReportCard = ({ data }) => {
           margin-top: 12px;
           max-width: 960px;
           width: 100%;
-          border-top: 4px solid var(--primary);
+          border-top: 4px solid ${currentColor};
         }
 
         .report-header {
@@ -158,10 +175,10 @@ const VisualReportCard = ({ data }) => {
           margin-bottom: 14px;
         }
 
-        .safety-badge,
         .quality-badge {
           display: inline-flex;
           align-items: center;
+          gap: 8px;
           min-height: 32px;
           padding: 6px 12px;
           border-radius: 999px;
@@ -217,6 +234,34 @@ const VisualReportCard = ({ data }) => {
           margin: 0;
           color: var(--text-secondary);
           line-height: 1.65;
+        }
+
+        .visual-overview-grid {
+          display: grid;
+          grid-template-columns: repeat(3, minmax(0, 1fr));
+          gap: 14px;
+          margin-bottom: 22px;
+        }
+
+        .overview-card {
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          padding: 16px;
+          border-radius: 18px;
+          border: 1px solid var(--border-color);
+          background: var(--surface-muted);
+        }
+
+        .overview-card strong {
+          color: var(--text-primary);
+          line-height: 1.45;
+        }
+
+        .overview-card span:last-child {
+          color: var(--text-secondary);
+          line-height: 1.6;
+          font-size: 13px;
         }
 
         .section-grid {
@@ -282,21 +327,8 @@ const VisualReportCard = ({ data }) => {
           line-height: 1.6;
         }
 
-        .disclaimer {
-          display: flex;
-          align-items: flex-start;
-          gap: 10px;
-          margin-top: 24px;
-          padding: 14px 16px;
-          border-radius: 14px;
-          border: 1px solid var(--border-color);
-          background: var(--surface-muted);
-          color: var(--text-secondary);
-          font-size: 12px;
-          line-height: 1.6;
-        }
-
         @media (max-width: 900px) {
+          .visual-overview-grid,
           .section-grid {
             grid-template-columns: 1fr;
           }
