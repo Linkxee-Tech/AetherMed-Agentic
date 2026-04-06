@@ -105,6 +105,15 @@ Notes:
 - If `OPENAI_API_KEY` is missing, the app falls back to offline heuristic mode for supported flows.
 - If `MONGODB_URI` is missing or unreachable, the app still runs without persistence.
 
+## Prompt Opinion A2A
+
+The backend exposes a Prompt Opinion compatible A2A endpoint at:
+
+- `GET /.well-known/agent-card.json`
+- `POST /`
+
+Deployment and registration details are in [docs/prompt-opinion-a2a-deployment.md](docs/prompt-opinion-a2a-deployment.md).
+
 ## Install
 
 From the repo root:

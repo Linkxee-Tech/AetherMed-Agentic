@@ -1,0 +1,33 @@
+services:
+  - type: web
+    name: aethermed-prompt-opinion
+    runtime: node
+    rootDir: backend
+    buildCommand: npm install
+    startCommand: node server.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-5-mini
+      - key: OPENAI_VISION_MODEL
+        value: gpt-4.1-mini
+      - key: AETHERMED_AGENT_MODE
+        value: auto
+      - key: ALLOWED_ORIGINS
+        value: https://aether-med-agentic.vercel.app,https://aethermed-agentic.onrender.com
+      - key: MONGODB_URI
+        sync: false
+      - key: PROMPT_OPINION_AGENT_URL
+        value: https://aethermed-agentic.onrender.com
+      - key: PROMPT_OPINION_AGENT_NAME
+        value: aethermed_master_agent
+      - key: PROMPT_OPINION_AGENT_DESCRIPTION
+        value: AetherMed multimodal healthcare guidance agent for Prompt Opinion.
+      - key: PROMPT_OPINION_AGENT_VERSION
+        value: 1.0.0
+      - key: PROMPT_OPINION_API_KEY
+        sync: false
