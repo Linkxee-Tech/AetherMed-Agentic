@@ -990,39 +990,157 @@ app.get("/health", (req, res) => {
     res.send("OK");
 });
 
+function buildMcpToolsList() {
+    return [
+        {
+            name: 'knowledge_lookup',
+            description: 'Retrieves known risks and standard protocols for a list of symptoms.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    symptoms: { type: 'array', items: { type: 'string' } }
+                },
+                required: ['symptoms']
+            }
+        },
+        {
+            name: 'risk_score',
+            description: 'Calculates clinical priority score combining multiple risk factors.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    severity: { type: 'string' },
+                    ageRange: { type: 'string' },
+                    urgency: { type: 'number' }
+                },
+                required: ['severity', 'urgency']
+            }
+        }
+    ];
+}
+
+function executeMcpTool(toolName, parameters = {}) {
+    if (toolName === 'knowledge_lookup') {
+        if (!Array.isArray(parameters.symptoms)) {
+            const error = new Error("tool 'knowledge_lookup' requires an array of 'symptoms'.");
+            error.status = 400;
+            throw error;
+        }
+
+        return knowledge_lookup(parameters.symptoms);
+    }
+
+    if (toolName === 'risk_score') {
+        if (!parameters.severity || parameters.urgency === undefined || parameters.urgency === null) {
+            const error = new Error("tool 'risk_score' requires 'severity' and 'urgency'.");
+            error.status = 400;
+            throw error;
+        }
+
+        return risk_score(parameters.severity, parameters.ageRange || 'unknown', parameters.urgency);
+    }
+
+    const error = new Error(`Tool ${toolName} not found mapped in MCP server.`);
+    error.status = 404;
+    throw error;
+}
+
 /**
  * @route GET /mcp/v1/tools
  * @desc MCP tool discovery for Prompt Opinion integrations
  */
 app.get('/mcp/v1/tools', (req, res) => {
     return res.json({
-        tools: [
-            {
-                name: 'knowledge_lookup',
-                description: 'Retrieves known risks and standard protocols for a list of symptoms.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        symptoms: { type: 'array', items: { type: 'string' } }
-                    },
-                    required: ['symptoms']
-                }
-            },
-            {
-                name: 'risk_score',
-                description: 'Calculates clinical priority score combining multiple risk factors.',
-                parameters: {
-                    type: 'object',
-                    properties: {
-                        severity: { type: 'string' },
-                        ageRange: { type: 'string' },
-                        urgency: { type: 'number' }
-                    },
-                    required: ['severity', 'urgency']
-                }
-            }
-        ]
+        tools: buildMcpToolsList().map((tool) => ({
+            name: tool.name,
+            description: tool.description,
+            parameters: tool.inputSchema
+        }))
     });
+});
+
+/**
+ * @route POST /mcp
+ * @desc MCP JSON-RPC endpoint for Prompt Opinion MCP server tests
+ */
+app.post('/mcp', (req, res) => {
+    const body = req.body || {};
+    const id = body.id ?? null;
+    const method = body.method;
+    const params = body.params || {};
+
+    const respond = (result) => res.json({
+        jsonrpc: '2.0',
+        id,
+        result
+    });
+
+    const respondError = (code, message, data) => res.status(code === -32601 || code === -32600 || code === -32602 ? 400 : 500).json({
+        jsonrpc: '2.0',
+        id,
+        error: {
+            code,
+            message,
+            ...(data ? { data } : {})
+        }
+    });
+
+    try {
+        if (body.jsonrpc && body.jsonrpc !== '2.0') {
+            return respondError(-32600, 'Invalid Request', { detail: 'jsonrpc must be "2.0".' });
+        }
+
+        if (method === 'initialize') {
+            return respond({
+                protocolVersion: '2024-11-05',
+                serverInfo: {
+                    name: 'AetherMed MCP Server',
+                    version: '1.0.0'
+                },
+                capabilities: {
+                    tools: { listChanged: false }
+                }
+            });
+        }
+
+        if (method === 'tools/list') {
+            return respond({
+                tools: buildMcpToolsList()
+            });
+        }
+
+        if (method === 'tools/call') {
+            const toolName = params.name || params.toolName || params.tool;
+            const argumentsPayload = params.arguments || params.parameters || {};
+
+            if (!toolName) {
+                return respondError(-32602, 'Invalid params', { detail: 'tools/call requires params.name.' });
+            }
+
+            const toolResult = executeMcpTool(toolName, argumentsPayload);
+            return respond({
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify(toolResult)
+                    }
+                ]
+            });
+        }
+
+        return respondError(-32601, 'Method not found', { detail: `Unsupported MCP method: ${method}.` });
+    } catch (error) {
+        if (error.status === 400) {
+            return respondError(-32602, 'Invalid params', { detail: error.message });
+        }
+
+        if (error.status === 404) {
+            return respondError(-32601, 'Method not found', { detail: error.message });
+        }
+
+        console.error('MCP JSON-RPC Error:', error);
+        return respondError(-32603, 'Internal error', { detail: error.message });
+    }
 });
 
 /**
@@ -1105,15 +1223,9 @@ app.post('/mcp/v1/invoke', (req, res) => {
         let result;
 
         if (toolName === 'knowledge_lookup') {
-            if (!Array.isArray(parameters.symptoms)) {
-                return res.status(400).json({ error: "tool 'knowledge_lookup' requires an array of 'symptoms'." });
-            }
-            result = knowledge_lookup(parameters.symptoms);
+            result = executeMcpTool('knowledge_lookup', parameters);
         } else if (toolName === 'risk_score') {
-            if (!parameters.severity || parameters.urgency === undefined || parameters.urgency === null) {
-                return res.status(400).json({ error: "tool 'risk_score' requires 'severity' and 'urgency'." });
-            }
-            result = risk_score(parameters.severity, parameters.ageRange || 'unknown', parameters.urgency);
+            result = executeMcpTool('risk_score', parameters);
         } else {
             return res.status(404).json({ error: `Tool ${toolName} not found mapped in MCP server.` });
         }
