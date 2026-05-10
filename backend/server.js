@@ -1031,8 +1031,68 @@ app.get('/mcp/v1/tools', (req, res) => {
  */
 app.post('/mcp/v1/invoke', (req, res) => {
     const body = req.body || {};
-    const toolName = body.toolName || body.name || body.tool || body.method;
-    const parameters = body.parameters || body.arguments || body.args || body.input || {};
+    const rpcMethod = body.method;
+    const params = body.params || {};
+    const toolName = body.toolName || body.name || body.tool || params.toolName || params.name || params.tool || rpcMethod;
+    const parameters = body.parameters || body.arguments || body.args || body.input || params.parameters || params.arguments || params.args || params.input || {};
+
+    if (rpcMethod === 'initialize' || toolName === 'initialize') {
+        return res.json({
+            success: true,
+            method: 'initialize',
+            result: {
+                serverInfo: {
+                    name: 'AetherMed MCP Server',
+                    version: '1.0.0'
+                },
+                capabilities: {
+                    tools: { listChanged: false }
+                }
+            }
+        });
+    }
+
+    if (
+        rpcMethod === 'tools/list'
+        || rpcMethod === 'tools.get'
+        || rpcMethod === 'tools'
+        || toolName === 'tools/list'
+        || toolName === 'tools.get'
+        || toolName === 'tools'
+    ) {
+        return res.json({
+            success: true,
+            method: 'tools/list',
+            result: {
+                tools: [
+                    {
+                        name: 'knowledge_lookup',
+                        description: 'Retrieves known risks and standard protocols for a list of symptoms.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                symptoms: { type: 'array', items: { type: 'string' } }
+                            },
+                            required: ['symptoms']
+                        }
+                    },
+                    {
+                        name: 'risk_score',
+                        description: 'Calculates clinical priority score combining multiple risk factors.',
+                        inputSchema: {
+                            type: 'object',
+                            properties: {
+                                severity: { type: 'string' },
+                                ageRange: { type: 'string' },
+                                urgency: { type: 'number' }
+                            },
+                            required: ['severity', 'urgency']
+                        }
+                    }
+                ]
+            }
+        });
+    }
 
     if (!toolName) {
         return res.status(400).json({
