@@ -24,6 +24,7 @@ const PORT = process.env.PORT || 5000;
 const A2A_PROTOCOL_VERSION = '0.3.0';
 const AGENT_CARD_PATH = '/.well-known/agent-card.json';
 const a2aTaskStore = new Map();
+const mcpSessions = new Set();
 
 process.on('unhandledRejection', (reason, promise) => {
     console.error('Unhandled Rejection at:', promise, 'reason:', reason);
@@ -1066,8 +1067,14 @@ app.get('/mcp/v1/tools', (req, res) => {
 app.post('/mcp', (req, res) => {
     const body = req.body || {};
     const id = body.id ?? null;
-    const method = body.method;
+    const headerMethod = req.headers['mcp-method'];
+    const method = body.method || (Array.isArray(headerMethod) ? headerMethod[0] : headerMethod);
     const params = body.params || {};
+    const protocolHeader = req.headers['mcp-protocol-version'];
+    const requestedProtocolVersion = typeof params.protocolVersion === 'string' && params.protocolVersion.trim()
+        ? params.protocolVersion.trim()
+        : (Array.isArray(protocolHeader) ? protocolHeader[0] : protocolHeader) || '2025-06-18';
+    const incomingSessionId = req.headers['mcp-session-id'];
 
     const respond = (result) => res.json({
         jsonrpc: '2.0',
@@ -1091,8 +1098,13 @@ app.post('/mcp', (req, res) => {
         }
 
         if (method === 'initialize') {
+            const sessionId = uuidv4();
+            mcpSessions.add(sessionId);
+            res.setHeader('Mcp-Session-Id', sessionId);
+            res.setHeader('Mcp-Protocol-Version', requestedProtocolVersion);
+
             return respond({
-                protocolVersion: '2024-11-05',
+                protocolVersion: requestedProtocolVersion,
                 serverInfo: {
                     name: 'AetherMed MCP Server',
                     version: '1.0.0'
@@ -1102,6 +1114,25 @@ app.post('/mcp', (req, res) => {
                 }
             });
         }
+
+        if (incomingSessionId) {
+            const sessionId = Array.isArray(incomingSessionId) ? incomingSessionId[0] : incomingSessionId;
+            if (sessionId && !mcpSessions.has(sessionId)) {
+                return res.status(404).json({
+                    jsonrpc: '2.0',
+                    id,
+                    error: {
+                        code: -32001,
+                        message: 'Session not found',
+                        data: { detail: 'Mcp-Session-Id is invalid or expired.' }
+                    }
+                });
+            }
+            if (sessionId) {
+                res.setHeader('Mcp-Session-Id', sessionId);
+            }
+        }
+        res.setHeader('Mcp-Protocol-Version', requestedProtocolVersion);
 
         if (method === 'notifications/initialized') {
             return respond({});
