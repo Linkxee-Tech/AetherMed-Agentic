@@ -29,6 +29,26 @@ const DOCUMENT_KEYWORDS = [
     'doctor note'
 ];
 
+const DRUG_KEYWORDS = [
+    'drug',
+    'medicine',
+    'medication',
+    'pill',
+    'tablet',
+    'capsule',
+    'syrup',
+    'packaging',
+    'package',
+    'blister',
+    'bottle',
+    'pharmacy',
+    'barcode',
+    'batch',
+    'expiry',
+    'fake drug',
+    'counterfeit'
+];
+
 const URGENT_KEYWORDS = [
     'emergency',
     'urgent',
@@ -150,10 +170,44 @@ function buildDocumentSummary(result) {
     };
 }
 
+function buildDrugCheckerSummary(result) {
+    const risk = normalizeRiskLabel(result?.riskLevel);
+    const urgentWarning = firstNonEmpty(result?.urgentWarnings?.[0]);
+
+    return {
+        inputTypeCode: 'drug_checker',
+        inputTypeDetected: 'Drug authenticity screening',
+        riskLevelCode: risk.code,
+        riskLevel: risk.label,
+        safeSummary: firstNonEmpty(result?.productSummary, result?.authenticityStatus, result?.finalAdvice),
+        recommendedNextStep: firstNonEmpty(result?.whatToDoNext?.[0], result?.safeChecks?.[0], result?.finalAdvice),
+        emergencyAdvice: urgentWarning,
+        finalUserFacingResponse: firstNonEmpty(result?.finalAdvice, result?.whatToDoNext?.[0])
+    };
+}
+
+function buildMentalSupportSummary(result) {
+    const risk = normalizeRiskLabel(result?.riskLevel);
+    const urgentWarning = firstNonEmpty(result?.whenToSeekImmediateHelp?.[0]);
+
+    return {
+        inputTypeCode: 'mental_support',
+        inputTypeDetected: 'Mental support session',
+        riskLevelCode: risk.code,
+        riskLevel: risk.label,
+        safeSummary: firstNonEmpty(result?.supportFocus, result?.validation, result?.supportiveResponse),
+        recommendedNextStep: firstNonEmpty(result?.followUpSuggestion, result?.groundingSteps?.[0], result?.copingSteps?.[0]),
+        emergencyAdvice: urgentWarning,
+        finalUserFacingResponse: firstNonEmpty(result?.supportiveResponse, result?.audioReply)
+    };
+}
+
 function buildMultimodalSummary(kind, data) {
     if (kind === 'text') return buildTextSummary(data);
     if (kind === 'visual') return buildVisualSummary(data);
     if (kind === 'document') return buildDocumentSummary(data);
+    if (kind === 'drug') return buildDrugCheckerSummary(data);
+    if (kind === 'mental_support') return buildMentalSupportSummary(data);
 
     return {
         inputTypeCode: 'unknown',
@@ -208,6 +262,16 @@ function buildUploadAssistantGuidance(classification = {}) {
         };
     }
 
+    if (classification.code === 'drug_packaging') {
+        return {
+            ...base,
+            supportiveIntro: 'This looks like a medicine package, blister pack, bottle, or barcode image, so I can route it to the drug safety workflow.',
+            minimumContextLabel: 'What do you want checked?',
+            minimumContextPlaceholder: 'For example: check if this medicine looks suspicious, explain the package warnings, or review this barcode and seal.',
+            supportNote: 'Add the drug name, barcode, seller details, or unusual packaging details if you have them. AetherMed screens for risk signals and safer verification steps.'
+        };
+    }
+
     return base;
 }
 
@@ -238,6 +302,14 @@ function buildImageContextFallback(classification = {}, input = {}) {
         };
     }
 
+    if (classification.code === 'drug_packaging') {
+        return {
+            summary: 'This looks like a medicine package or barcode image.',
+            suggestedContext: 'This appears to be a drug package, blister pack, bottle, or barcode that I want checked for safer medicine guidance.',
+            source: 'fallback'
+        };
+    }
+
     return {
         summary: `This looks like an ${sourceLabel}.`,
         suggestedContext: 'I want help understanding what this uploaded image may be about in a safe, non-diagnostic way.',
@@ -261,6 +333,10 @@ function detectInputFromHints(input = {}) {
 
     if (hasImage && containsKeyword(notes, DOCUMENT_KEYWORDS)) {
         return { kind: 'document', code: 'medical_document', label: 'Medical report or diagnosis note', reason: 'The notes suggest a medical document.' };
+    }
+
+    if (hasImage && containsKeyword(notes, DRUG_KEYWORDS)) {
+        return { kind: 'drug', code: 'drug_packaging', label: 'Drug package or barcode image', reason: 'The notes suggest a medicine package or barcode.' };
     }
 
     if (hasImage) {
@@ -288,17 +364,19 @@ Classify the uploaded input into exactly one category:
 - "visible_body_image"
 - "medical_document"
 - "medical_imaging"
+- "drug_packaging"
 
 Rules:
 - "text_symptoms" is for written symptom descriptions without an uploaded image.
 - "visible_body_image" is for normal photos or camera captures of visible body issues such as rash, wound, swelling, discoloration, or other external symptoms.
 - "medical_document" is for diagnosis notes, clinic reports, prescription notes, discharge summaries, lab screenshots, or medical report images.
 - "medical_imaging" is for X-rays, CT scans, MRI images, ultrasound captures, radiographs, mammograms, or similar imaging studies.
+- "drug_packaging" is for medicine boxes, blister packs, bottle labels, barcodes on medicine packaging, pharmacy labels, or drug authenticity checks.
 - Do not diagnose anything. This is classification only.
 
 Return strict JSON:
 {
-  "code": "text_symptoms" | "visible_body_image" | "medical_document" | "medical_imaging",
+  "code": "text_symptoms" | "visible_body_image" | "medical_document" | "medical_imaging" | "drug_packaging",
   "reason": "one short sentence"
 }`;
 
@@ -322,6 +400,10 @@ Return strict JSON:
 
         if (code === 'visible_body_image') {
             return { kind: 'visual', code, label: 'Visible body image', reason: result.reason || 'The uploaded image appears to be a visible body photo.' };
+        }
+
+        if (code === 'drug_packaging') {
+            return { kind: 'drug', code, label: 'Drug package or barcode image', reason: result.reason || 'The uploaded image appears to be a medicine package or barcode.' };
         }
     } catch (error) {
         console.warn('Multimodal router fallback to heuristic classification.', error.message);

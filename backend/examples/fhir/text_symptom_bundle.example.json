@@ -1,0 +1,73 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "identifier": {
+    "system": "urn:aethermed:session",
+    "value": "example-session-text-001"
+  },
+  "meta": {
+    "lastUpdated": "2026-05-10T12:00:00.000Z",
+    "tag": [
+      {
+        "display": "Simulated healthcare hackathon assessment"
+      }
+    ]
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:obs-1",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "display": "Patient reported symptoms"
+            }
+          ]
+        },
+        "valueString": "chest pain, sweating, shortness of breath"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:imp-1",
+      "resource": {
+        "resourceType": "ClinicalImpression",
+        "status": "completed",
+        "description": "Emergency physical symptom language was detected.",
+        "summary": "High-risk cardiorespiratory red flags were identified from reported symptoms.",
+        "protocol": [
+          "CRITICAL"
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:cp-1",
+      "resource": {
+        "resourceType": "CarePlan",
+        "status": "active",
+        "intent": "proposal",
+        "activity": [
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "description": "EMERGENCY: Seek immediate emergency medical evaluation."
+            }
+          },
+          {
+            "detail": {
+              "kind": "Appointment",
+              "description": "Referral to Emergency Room at nearest emergency facility."
+            }
+          }
+        ],
+        "note": [
+          {
+            "text": "AetherMed provides safety guidance and does not provide a medical diagnosis."
+          }
+        ]
+      }
+    }
+  ]
+}

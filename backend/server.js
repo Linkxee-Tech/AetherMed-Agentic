@@ -9,11 +9,14 @@ const { v4: uuidv4 } = require('uuid');
 const { orchestrate } = require('./orchestrator');
 const { visualSymptomAgent } = require('./agents/visualSymptomAgent');
 const { medicalDocumentAgent } = require('./agents/medicalDocumentAgent');
+const { drugCheckerAgent } = require('./agents/drugCheckerAgent');
+const { mentalSupportAgent } = require('./agents/mentalSupportAgent');
 const Session = require('./models/Session');
 const { getTranslationMode, shouldUseOfflineAgents } = require('./tools/runtime');
 const { buildMultimodalSummary, buildUploadAssistantGuidance, classifyMultimodalInput, generateImageContextDraft } = require('./tools/multimodalSummary');
 const { sanitizeTextField, sanitizeUrgency, validateImageDataUrl } = require('./tools/requestValidation');
 const { executePromptOpinionTask } = require('./agents/promptOpinionAgent');
+const { classifyHealthIntent } = require('./tools/intentRouter');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -159,6 +162,32 @@ function buildAgentSkills(requireApiKey) {
             inputModes: ['text/plain', 'application/json'],
             outputModes: ['application/json', 'text/plain'],
             ...(skillSecurity ? { security: skillSecurity } : {})
+        },
+        {
+            id: 'drug-checker',
+            name: 'Drug Checker',
+            description: 'Screens medicine descriptions or packaging images for counterfeit-risk warning signs and returns verification guidance to help prevent fake drug usage.',
+            tags: ['healthcare', 'drug-safety', 'pharmacy', 'counterfeit-risk', 'verification'],
+            examples: [
+                'Review this medicine package and tell me if there are suspicious warning signs.',
+                'I bought this antibiotic cheaply from an informal seller. What checks should I do before using it?'
+            ],
+            inputModes: ['application/json', 'text/plain', 'image/jpeg', 'image/png', 'image/webp'],
+            outputModes: ['application/json', 'text/plain'],
+            ...(skillSecurity ? { security: skillSecurity } : {})
+        },
+        {
+            id: 'mental-support',
+            name: 'Mental Support',
+            description: 'Provides emotional safety guidance, grounding, coping steps, and urgent escalation when a user may be at risk of self-harm or severe distress.',
+            tags: ['healthcare', 'mental-support', 'emotional-safety', 'grounding', 'crisis-escalation'],
+            examples: [
+                'I feel overwhelmed and cannot calm down.',
+                'I feel unsafe and need someone to help me through this moment.'
+            ],
+            inputModes: ['application/json', 'text/plain'],
+            outputModes: ['application/json', 'text/plain'],
+            ...(skillSecurity ? { security: skillSecurity } : {})
         }
     ];
 }
@@ -182,6 +211,7 @@ function buildAgentCard() {
         url: getPublicAgentUrl(),
         version: process.env.PROMPT_OPINION_AGENT_VERSION || '1.0.0',
         protocolVersion: A2A_PROTOCOL_VERSION,
+        supportedInterfaces: ['A2A', 'JSONRPC'],
         preferredTransport: 'JSONRPC',
         defaultInputModes: ['text/plain', 'application/json'],
         defaultOutputModes: ['application/json', 'text/plain'],
@@ -355,6 +385,9 @@ function normalizeA2aPayload(body) {
             ? partData.user_query.trim()
             : textQuery,
         symptoms: typeof partData.symptoms === 'string' ? partData.symptoms : textQuery,
+        drugName: typeof partData.drugName === 'string' ? partData.drugName : '',
+        message: typeof partData.message === 'string' ? partData.message : textQuery,
+        sessionMessages: Array.isArray(partData.sessionMessages) ? partData.sessionMessages : [],
         ageRange: partData.ageRange,
         urgency: partData.urgency,
         notes: partData.notes,
@@ -466,13 +499,61 @@ async function persistSession(sessionId, symptoms, data, trace) {
         return;
     }
 
-    const newSession = new Session({
-        sessionId,
-        symptoms: String(symptoms || 'AetherMed session').substring(0, 100),
-        data,
-        trace
+    await Session.findOneAndUpdate(
+        { sessionId },
+        {
+            sessionId,
+            symptoms: String(symptoms || 'AetherMed session').substring(0, 100),
+            data,
+            trace,
+            createdAt: new Date()
+        },
+        {
+            upsert: true,
+            new: true,
+            setDefaultsOnInsert: true
+        }
+    );
+}
+
+function sanitizeSessionMessages(rawMessages, maxItems = 12) {
+    if (!Array.isArray(rawMessages)) {
+        return [];
+    }
+
+    return rawMessages
+        .map((entry) => {
+            const role = entry?.role === 'assistant' ? 'assistant' : 'user';
+            const text = sanitizeTextField(entry?.text, {
+                fieldName: 'Session message',
+                maxLength: 1200
+            });
+
+            if (!text) {
+                return null;
+            }
+
+            return { role, text };
+        })
+        .filter(Boolean)
+        .slice(-maxItems);
+}
+
+function sanitizeBarcodeValue(rawValue) {
+    return sanitizeTextField(rawValue, {
+        fieldName: 'Barcode',
+        maxLength: 120
     });
-    await newSession.save();
+}
+
+function attachRoutingMeta(responsePayload, routingMeta = {}) {
+    return {
+        ...responsePayload,
+        meta: {
+            ...responsePayload.meta,
+            ...routingMeta
+        }
+    };
 }
 
 async function executeTextFlow({ symptoms, ageRange, urgency, notes, sessionId }) {
@@ -547,14 +628,236 @@ async function executeDocumentFlow({ imageDataUrl, documentText, notes, language
     };
 }
 
+async function executeDrugCheckerFlow({ drugName, imageDataUrl, notes, languageHint, barcodeValue, sessionId }) {
+    const result = await drugCheckerAgent({
+        drugName,
+        imageDataUrl,
+        notes,
+        languageHint,
+        barcodeValue,
+        sessionId
+    });
+    result.multimodalSummary = buildMultimodalSummary('drug', result);
+
+    const trace = [
+        {
+            agent: 'Drug Checker',
+            mode: shouldUseOfflineAgents() ? 'offline' : 'openai',
+            timestamp: new Date().toISOString(),
+            insight: `Drug safety review completed with ${result.riskLevel.toLowerCase()} counterfeit-risk guidance.`
+        }
+    ];
+
+    await persistSession(sessionId, drugName || notes || 'Drug checker review', result, trace);
+
+    return {
+        success: true,
+        sessionId,
+        data: result,
+        trace,
+        meta: {
+            analysisType: 'drug_checker',
+            agentMode: shouldUseOfflineAgents() ? 'offline' : 'openai'
+        }
+    };
+}
+
+async function executeMentalSupportFlow({ message, sessionMessages, languageHint, sessionId }) {
+    const result = await mentalSupportAgent({
+        message,
+        sessionMessages,
+        languageHint,
+        sessionId
+    });
+    result.multimodalSummary = buildMultimodalSummary('mental_support', result);
+
+    const trace = [
+        {
+            agent: 'Mental Support',
+            mode: shouldUseOfflineAgents() ? 'offline' : 'openai',
+            timestamp: new Date().toISOString(),
+            insight: `Mental support guidance generated with ${result.riskLevel.toLowerCase()} emotional-risk handling.`
+        }
+    ];
+
+    await persistSession(sessionId, message || 'Mental support session', {
+        ...result,
+        sessionMessages
+    }, trace);
+
+    return {
+        success: true,
+        sessionId,
+        data: result,
+        trace,
+        meta: {
+            analysisType: 'mental_support',
+            agentMode: shouldUseOfflineAgents() ? 'offline' : 'openai'
+        }
+    };
+}
+
+async function executeIntentAwareFlow({
+    message,
+    drugName,
+    ageRange,
+    urgency,
+    notes,
+    imageDataUrl,
+    documentText,
+    languageHint,
+    sessionMessages,
+    barcodeValue,
+    sessionId
+}) {
+    const primaryMessage = message || drugName || '';
+    const normalizedNotes = notes || '';
+    const classification = (imageDataUrl || documentText)
+        ? await classifyMultimodalInput({
+            symptoms: primaryMessage,
+            imageDataUrl,
+            documentText,
+            notes: normalizedNotes,
+            languageHint
+        })
+        : null;
+
+    if (classification?.kind === 'document') {
+        const responsePayload = await executeDocumentFlow({
+            imageDataUrl,
+            documentText,
+            notes: normalizedNotes,
+            languageHint,
+            sessionId
+        });
+
+        return attachRoutingMeta(responsePayload, {
+            detectedIntent: 'document_explanation',
+            detectedRiskLevel: responsePayload.data?.multimodalSummary?.riskLevelCode || 'MODERATE',
+            routingReason: classification.reason,
+            routedInputCode: classification.code,
+            routedInputType: classification.label,
+            supportingIntents: []
+        });
+    }
+
+    if (classification?.kind === 'visual') {
+        const responsePayload = await executeVisualFlow({
+            imageDataUrl,
+            notes: normalizedNotes,
+            languageHint,
+            sessionId
+        });
+
+        return attachRoutingMeta(responsePayload, {
+            detectedIntent: 'visible_symptom_review',
+            detectedRiskLevel: responsePayload.data?.multimodalSummary?.riskLevelCode || 'MODERATE',
+            routingReason: classification.reason,
+            routedInputCode: classification.code,
+            routedInputType: classification.label,
+            supportingIntents: []
+        });
+    }
+
+    if (classification?.kind === 'drug') {
+        const responsePayload = await executeDrugCheckerFlow({
+            drugName: drugName || primaryMessage,
+            imageDataUrl,
+            notes: normalizedNotes,
+            languageHint,
+            barcodeValue,
+            sessionId
+        });
+
+        return attachRoutingMeta(responsePayload, {
+            detectedIntent: 'drug_checker',
+            detectedRiskLevel: responsePayload.data?.multimodalSummary?.riskLevelCode || 'MODERATE',
+            routingReason: classification.reason,
+            routedInputCode: classification.code,
+            routedInputType: classification.label,
+            supportingIntents: []
+        });
+    }
+
+    const intent = classifyHealthIntent({
+        message: primaryMessage,
+        notes: normalizedNotes,
+        imageContext: classification?.label || '',
+        barcodeValue
+    });
+
+    if (intent.kind === 'mental_support') {
+        const responsePayload = await executeMentalSupportFlow({
+            message: primaryMessage,
+            sessionMessages,
+            languageHint,
+            sessionId
+        });
+
+        return attachRoutingMeta(responsePayload, {
+            detectedIntent: intent.intent,
+            detectedRiskLevel: intent.riskLevel,
+            routingReason: intent.reason,
+            supportingIntents: intent.supportingIntents,
+            routedInputCode: classification?.code || 'text_message',
+            routedInputType: classification?.label || 'Text message'
+        });
+    }
+
+    if (intent.kind === 'drug') {
+        const responsePayload = await executeDrugCheckerFlow({
+            drugName: drugName || primaryMessage,
+            imageDataUrl,
+            notes: normalizedNotes,
+            languageHint,
+            barcodeValue,
+            sessionId
+        });
+
+        return attachRoutingMeta(responsePayload, {
+            detectedIntent: intent.intent,
+            detectedRiskLevel: intent.riskLevel,
+            routingReason: intent.reason,
+            supportingIntents: intent.supportingIntents,
+            routedInputCode: classification?.code || 'drug_checker',
+            routedInputType: classification?.label || 'Drug safety request'
+        });
+    }
+
+    const responsePayload = await executeTextFlow({
+        symptoms: primaryMessage,
+        ageRange,
+        urgency,
+        notes: normalizedNotes,
+        sessionId
+    });
+
+    return attachRoutingMeta(responsePayload, {
+        detectedIntent: intent.intent,
+        detectedRiskLevel: intent.riskLevel,
+        routingReason: intent.reason,
+        supportingIntents: intent.supportingIntents,
+        routedInputCode: classification?.code || 'text_symptoms',
+        routedInputType: classification?.label || 'Text symptoms'
+    });
+}
+
 async function executeA2aWorkflow(rawInput = {}) {
     const sessionId = rawInput.sessionId || uuidv4();
     const normalizedTask = normalizeTaskName(rawInput.taskName);
-
-    const symptoms = sanitizeTextField(rawInput.symptoms || rawInput.userQuery, {
+    const message = sanitizeTextField(rawInput.message || rawInput.symptoms || rawInput.userQuery, {
+        fieldName: 'Message',
+        maxLength: 1500
+    });
+    const symptoms = sanitizeTextField(rawInput.symptoms || rawInput.userQuery || rawInput.message, {
         fieldName: 'Symptoms',
         maxLength: 1500
     });
+    const drugName = sanitizeTextField(rawInput.drugName, {
+        fieldName: 'Drug name',
+        maxLength: 160
+    });
+    const sessionMessages = sanitizeSessionMessages(rawInput.sessionMessages);
     const ageRange = sanitizeTextField(rawInput.ageRange, {
         fieldName: 'Age range',
         maxLength: 40
@@ -575,11 +878,37 @@ async function executeA2aWorkflow(rawInput = {}) {
         fieldName: 'Language hint',
         maxLength: 80
     });
+    const barcodeValue = sanitizeBarcodeValue(rawInput.barcodeValue);
 
     const forceVisual = ['visual_symptom_review', 'visible_symptom_review', 'visual_review', 'image_review'].includes(normalizedTask);
     const forceDocument = ['medical_document_explanation', 'document_explanation', 'document_review', 'medical_imaging_safety_guidance', 'medical_document_explainer'].includes(normalizedTask);
     const forceText = ['symptom_analysis', 'symptom_triage', 'triage', 'multilingual_health_guidance'].includes(normalizedTask);
+    const forceDrug = ['drug_checker', 'drug_checker_review', 'check_drug', 'drug_safety'].includes(normalizedTask);
+    const forceMentalSupport = ['mental_support', 'emotional_support', 'mental_health_support'].includes(normalizedTask);
     const useAutoRouting = !normalizedTask || normalizedTask === 'analyze_input' || normalizedTask === 'multimodal_intake';
+
+    if (forceDrug) {
+        if (!drugName && !imageDataUrl && !notes && !barcodeValue && !message) {
+            throw new Error('Provide a drug name, packaging image, barcode, or verification notes for the drug checker.');
+        }
+
+        return executeDrugCheckerFlow({
+            drugName: drugName || message,
+            imageDataUrl,
+            notes,
+            languageHint,
+            barcodeValue,
+            sessionId
+        });
+    }
+
+    if (forceMentalSupport) {
+        if (!message) {
+            throw new Error('A message is required to continue the mental support session.');
+        }
+
+        return executeMentalSupportFlow({ message, sessionMessages, languageHint, sessionId });
+    }
 
     if (forceVisual) {
         if (!imageDataUrl) {
@@ -606,42 +935,38 @@ async function executeA2aWorkflow(rawInput = {}) {
     }
 
     if (useAutoRouting || imageDataUrl || documentText) {
-        const classification = await classifyMultimodalInput({
-            symptoms,
+        return executeIntentAwareFlow({
+            message,
+            drugName,
+            ageRange,
+            urgency,
+            notes,
             imageDataUrl,
             documentText,
-            notes,
-            languageHint
+            languageHint,
+            sessionMessages,
+            barcodeValue,
+            sessionId
         });
-
-        if (classification.kind === 'document') {
-            if (!imageDataUrl && !documentText) {
-                throw new Error('Upload a document image or provide document text for document explanation.');
-            }
-
-            return executeDocumentFlow({ imageDataUrl, documentText, notes, languageHint, sessionId });
-        }
-
-        if (classification.kind === 'visual') {
-            if (!imageDataUrl) {
-                throw new Error('Uploaded image is required for visible symptom review.');
-            }
-
-            return executeVisualFlow({ imageDataUrl, notes, languageHint, sessionId });
-        }
-
-        if (!symptoms) {
-            throw new Error('Symptoms are required for symptom analysis.');
-        }
-
-        return executeTextFlow({ symptoms, ageRange, urgency, notes, sessionId });
     }
 
-    if (!symptoms) {
-        throw new Error('Symptoms are required for symptom analysis.');
+    if (!message) {
+        throw new Error('A message is required for AetherMed to route the request safely.');
     }
 
-    return executeTextFlow({ symptoms, ageRange, urgency, notes, sessionId });
+    return executeIntentAwareFlow({
+        message,
+        drugName,
+        ageRange,
+        urgency,
+        notes,
+        imageDataUrl,
+        documentText,
+        languageHint,
+        sessionMessages,
+        barcodeValue,
+        sessionId
+    });
 }
 
 app.get('/api/v1/health', (req, res) => {
@@ -947,6 +1272,133 @@ app.post('/api/v1/analyze-document', async (req, res) => {
 });
 
 /**
+ * @route POST /api/v1/check-drug
+ * @desc Counterfeit-risk screening for medicine descriptions or packaging images
+ */
+app.post('/api/v1/check-drug', async (req, res) => {
+    const sessionId = uuidv4();
+
+    try {
+        const drugName = sanitizeTextField(req.body?.drugName, {
+            fieldName: 'Drug name',
+            maxLength: 160
+        });
+        const imageDataUrl = validateImageDataUrl(req.body?.imageDataUrl, {
+            fieldName: 'Medicine image'
+        });
+        const barcodeValue = sanitizeBarcodeValue(req.body?.barcodeValue);
+        const notes = sanitizeTextField(req.body?.notes, {
+            fieldName: 'Drug details',
+            maxLength: 1500
+        });
+        const languageHint = sanitizeTextField(req.body?.languageHint, {
+            fieldName: 'Language hint',
+            maxLength: 80
+        });
+
+        if (!drugName && !imageDataUrl && !notes && !barcodeValue) {
+            return res.status(400).json({ error: 'Provide a drug name, packaging image, barcode, or notes so AetherMed can review counterfeit-risk warning signs.' });
+        }
+
+        return res.json(await executeDrugCheckerFlow({ drugName, imageDataUrl, notes, languageHint, barcodeValue, sessionId }));
+    } catch (error) {
+        console.error('[DRUG CHECKER ERROR]', error);
+        const status = /required|must be|too large|too long|control text/i.test(error.message) ? 400 : 500;
+        return res.status(status).json({ error: status === 400 ? error.message : 'Failed to process the drug checker request.' });
+    }
+});
+
+/**
+ * @route POST /api/v1/analyze-message
+ * @desc Intent-aware text or mixed-input routing across symptom guidance, drug safety, and mental support
+ */
+app.post('/api/v1/analyze-message', async (req, res) => {
+    const sessionId = uuidv4();
+
+    try {
+        const message = sanitizeTextField(req.body?.message || req.body?.symptoms, {
+            fieldName: 'Message',
+            required: true,
+            maxLength: 1500
+        });
+        const drugName = sanitizeTextField(req.body?.drugName, {
+            fieldName: 'Drug name',
+            maxLength: 160
+        });
+        const ageRange = sanitizeTextField(req.body?.ageRange, {
+            fieldName: 'Age range',
+            maxLength: 40
+        }) || '18-35';
+        const urgency = sanitizeUrgency(req.body?.urgency);
+        const notes = sanitizeTextField(req.body?.notes, {
+            fieldName: 'Notes',
+            maxLength: 1500
+        });
+        const imageDataUrl = validateImageDataUrl(req.body?.imageDataUrl, {
+            fieldName: 'Uploaded image'
+        });
+        const documentText = sanitizeTextField(req.body?.documentText, {
+            fieldName: 'Document text',
+            maxLength: 12000
+        });
+        const barcodeValue = sanitizeBarcodeValue(req.body?.barcodeValue);
+        const sessionMessages = sanitizeSessionMessages(req.body?.sessionMessages);
+        const languageHint = sanitizeTextField(req.body?.languageHint, {
+            fieldName: 'Language hint',
+            maxLength: 80
+        });
+
+        return res.json(await executeIntentAwareFlow({
+            message,
+            drugName,
+            ageRange,
+            urgency,
+            notes,
+            imageDataUrl,
+            documentText,
+            languageHint,
+            sessionMessages,
+            barcodeValue,
+            sessionId
+        }));
+    } catch (error) {
+        console.error('[INTENT ROUTER ERROR]', error);
+        const status = /required|must be|too large|too long|control text|could not determine/i.test(error.message) ? 400 : 500;
+        return res.status(status).json({ error: status === 400 ? error.message : 'Failed to route the message safely.' });
+    }
+});
+
+/**
+ * @route POST /api/v1/mental-support
+ * @desc Ongoing emotional safety support with grounding and escalation guidance
+ */
+app.post('/api/v1/mental-support', async (req, res) => {
+    const sessionId = sanitizeTextField(req.body?.sessionId, {
+        fieldName: 'Session ID',
+        maxLength: 80
+    }) || uuidv4();
+
+    try {
+        const message = sanitizeTextField(req.body?.message, {
+            fieldName: 'Message',
+            required: true,
+            maxLength: 1500
+        });
+        const sessionMessages = sanitizeSessionMessages(req.body?.sessionMessages);
+        const languageHint = sanitizeTextField(req.body?.languageHint, {
+            fieldName: 'Language hint',
+            maxLength: 80
+        });
+
+        return res.json(await executeMentalSupportFlow({ message, sessionMessages, languageHint, sessionId }));
+    } catch (error) {
+        console.error('[MENTAL SUPPORT ERROR]', error);
+        const status = /required|must be|too long|control text/i.test(error.message) ? 400 : 500;
+        return res.status(status).json({ error: status === 400 ? error.message : 'Failed to process the mental support request.' });
+    }
+});
+
+/**
  * @route POST /api/v1/upload-assistant
  * @desc Classify an uploaded file/image and return the minimum extra context needed before routing
  */
@@ -971,8 +1423,9 @@ app.post('/api/v1/upload-assistant', async (req, res) => {
             fieldName: 'Symptoms',
             maxLength: 1500
         });
+        const barcodeValue = sanitizeBarcodeValue(req.body?.barcodeValue);
 
-        if (!imageDataUrl && !documentText && !symptoms) {
+        if (!imageDataUrl && !documentText && !symptoms && !barcodeValue) {
             return res.status(400).json({ error: 'Upload an image or provide text so AetherMed can identify the input type.' });
         }
 
@@ -981,7 +1434,7 @@ app.post('/api/v1/upload-assistant', async (req, res) => {
             documentText,
             notes,
             languageHint,
-            symptoms
+            symptoms: [symptoms, barcodeValue].filter(Boolean).join(' ')
         });
         const guidance = buildUploadAssistantGuidance(classification);
         const autoContext = await generateImageContextDraft({
@@ -1015,9 +1468,13 @@ app.post('/api/v1/analyze-input', async (req, res) => {
     const sessionId = uuidv4();
 
     try {
-        const symptoms = sanitizeTextField(req.body?.symptoms, {
-            fieldName: 'Symptoms',
+        const message = sanitizeTextField(req.body?.message || req.body?.symptoms, {
+            fieldName: 'Message',
             maxLength: 1500
+        });
+        const drugName = sanitizeTextField(req.body?.drugName, {
+            fieldName: 'Drug name',
+            maxLength: 160
         });
         const ageRange = sanitizeTextField(req.body?.ageRange, {
             fieldName: 'Age range',
@@ -1035,59 +1492,36 @@ app.post('/api/v1/analyze-input', async (req, res) => {
             fieldName: 'Document text',
             maxLength: 12000
         });
+        const barcodeValue = sanitizeBarcodeValue(req.body?.barcodeValue);
+        const sessionMessages = sanitizeSessionMessages(req.body?.sessionMessages);
         const languageHint = sanitizeTextField(req.body?.languageHint, {
             fieldName: 'Language hint',
             maxLength: 80
         });
 
-        const classification = await classifyMultimodalInput({
-            symptoms,
-            imageDataUrl,
-            documentText,
-            notes,
-            languageHint
-        });
-
-        console.log(`[MULTIMODAL] Session ${sessionId} routed as ${classification.code}`);
-
-        let responsePayload;
-
-        if (classification.kind === 'text') {
-            if (!symptoms) {
-                return res.status(400).json({ error: 'Symptoms are required for text symptom analysis.' });
-            }
-
-            responsePayload = await executeTextFlow({ symptoms, ageRange, urgency, notes, sessionId });
-        } else if (classification.kind === 'document') {
-            const hasImage = typeof imageDataUrl === 'string' && imageDataUrl.startsWith('data:image/');
-            const hasText = typeof documentText === 'string' && documentText.trim().length > 0;
-
-            if (!hasImage && !hasText) {
-                return res.status(400).json({ error: 'Upload a document image or paste document text to continue.' });
-            }
-
-            responsePayload = await executeDocumentFlow({ imageDataUrl, documentText, notes, languageHint, sessionId });
-        } else if (classification.kind === 'visual') {
-            if (!imageDataUrl || typeof imageDataUrl !== 'string' || !imageDataUrl.startsWith('data:image/')) {
-                return res.status(400).json({ error: 'A valid uploaded image is required for image analysis.' });
-            }
-
-            responsePayload = await executeVisualFlow({ imageDataUrl, notes, languageHint, sessionId });
-        } else {
+        if (!message && !imageDataUrl && !documentText && !barcodeValue) {
             return res.status(400).json({
-                error: 'AetherMed could not determine the input type. Provide symptom text, a visible body image, a medical report, or a scan image.'
+                error: 'Provide a health message, medicine image, barcode, medical report, or visible symptom image so AetherMed can route it safely.'
             });
         }
 
-        return res.json({
-            ...responsePayload,
-            meta: {
-                ...responsePayload.meta,
-                routedInputType: classification.label,
-                routedInputCode: classification.code,
-                routingReason: classification.reason
-            }
+        const responsePayload = await executeIntentAwareFlow({
+            message,
+            drugName,
+            ageRange,
+            urgency,
+            notes,
+            imageDataUrl,
+            documentText,
+            languageHint,
+            sessionMessages,
+            barcodeValue,
+            sessionId
         });
+
+        console.log(`[MULTIMODAL] Session ${sessionId} routed as ${responsePayload.meta?.routedInputCode || responsePayload.meta?.analysisType}`);
+
+        return res.json(responsePayload);
     } catch (error) {
         console.error('[MULTIMODAL ANALYSIS ERROR]', error);
         const status = /required|must be|too large|too long|control text|could not determine/i.test(error.message) ? 400 : 500;

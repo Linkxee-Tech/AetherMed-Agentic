@@ -6,6 +6,8 @@ const ALLOWED_VISUAL_SAFETY_LEVELS = ['Low', 'Moderate', 'High'];
 const ALLOWED_IMAGE_QUALITY = ['clear', 'unclear', 'incomplete'];
 const ALLOWED_DOCUMENT_READABILITY = ['clear', 'partial', 'unclear'];
 const ALLOWED_VISUAL_REVIEW_MODES = ['visible_symptom', 'medical_imaging'];
+const ALLOWED_COUNTERFEIT_RISK_LEVELS = ['Low', 'Moderate', 'High'];
+const ALLOWED_SUPPORT_RISK_LEVELS = ['Low', 'Moderate', 'High', 'Emergency'];
 
 function sanitizeText(value, fallback, maxLength = 400) {
     if (typeof value !== 'string') {
@@ -184,6 +186,51 @@ function normalizeDocumentExplanationResult(result, fallback) {
     };
 }
 
+function normalizeDrugCheckerResult(result, fallback) {
+    const riskLevel = ALLOWED_COUNTERFEIT_RISK_LEVELS.includes(result?.riskLevel)
+        ? result.riskLevel
+        : fallback.riskLevel;
+
+    return {
+        detectedLanguage: sanitizeText(result?.detectedLanguage, fallback.detectedLanguage, 80),
+        riskLevel,
+        barcodeValue: sanitizeText(result?.barcodeValue, fallback.barcodeValue || '', 120),
+        authenticityStatus: sanitizeText(result?.authenticityStatus, fallback.authenticityStatus, 120),
+        productSummary: sanitizeText(result?.productSummary, fallback.productSummary, 240),
+        riskIndicators: normalizeStringList(result?.riskIndicators, fallback.riskIndicators, 6, 220),
+        safeChecks: normalizeStringList(result?.safeChecks, fallback.safeChecks, 6, 220),
+        whatToDoNext: normalizeStringList(result?.whatToDoNext, fallback.whatToDoNext, 6, 220),
+        urgentWarnings: normalizeStringList(result?.urgentWarnings, fallback.urgentWarnings, 4, 240),
+        finalAdvice: sanitizeText(result?.finalAdvice, fallback.finalAdvice, 320),
+        shouldAvoidUse: typeof result?.shouldAvoidUse === 'boolean' ? result.shouldAvoidUse : Boolean(fallback.shouldAvoidUse)
+    };
+}
+
+function normalizeMentalSupportResult(result, fallback) {
+    const riskLevel = ALLOWED_SUPPORT_RISK_LEVELS.includes(result?.riskLevel)
+        ? result.riskLevel
+        : fallback.riskLevel;
+
+    return {
+        detectedLanguage: sanitizeText(result?.detectedLanguage, fallback.detectedLanguage, 80),
+        riskLevel,
+        emotionalState: sanitizeText(result?.emotionalState, fallback.emotionalState, 120),
+        supportFocus: sanitizeText(result?.supportFocus, fallback.supportFocus, 180),
+        validation: sanitizeText(result?.validation, fallback.validation, 220),
+        supportiveResponse: sanitizeText(result?.supportiveResponse, fallback.supportiveResponse, 420),
+        groundingSteps: normalizeStringList(result?.groundingSteps, fallback.groundingSteps, 6, 220),
+        copingSteps: normalizeStringList(result?.copingSteps, fallback.copingSteps, 6, 220),
+        sessionGuidance: normalizeStringList(result?.sessionGuidance, fallback.sessionGuidance, 6, 220),
+        followUpSuggestion: sanitizeText(result?.followUpSuggestion, fallback.followUpSuggestion, 220),
+        whenToSeekImmediateHelp: normalizeStringList(result?.whenToSeekImmediateHelp, fallback.whenToSeekImmediateHelp, 4, 240),
+        continuePrompt: sanitizeText(result?.continuePrompt, fallback.continuePrompt, 220),
+        audioReply: sanitizeText(result?.audioReply, fallback.audioReply || fallback.supportiveResponse, 260),
+        needsUrgentEscalation: typeof result?.needsUrgentEscalation === 'boolean'
+            ? result.needsUrgentEscalation
+            : Boolean(fallback.needsUrgentEscalation)
+    };
+}
+
 module.exports = {
     sanitizeText,
     normalizeTranslationResult,
@@ -192,5 +239,7 @@ module.exports = {
     normalizeAdviceResult,
     normalizeReferralResult,
     normalizeVisualAssessmentResult,
-    normalizeDocumentExplanationResult
+    normalizeDocumentExplanationResult,
+    normalizeDrugCheckerResult,
+    normalizeMentalSupportResult
 };

@@ -9,7 +9,8 @@
     "backend": "node server.js",
     "dev": "node server.js",
     "mcp": "node mcp-server.js",
-    "eval:synthetic": "node scripts/runSyntheticEval.js"
+    "eval:synthetic": "node scripts/runSyntheticEval.js",
+    "eval:fhir": "node scripts/validateFhirExamples.js"
   },
   "keywords": [],
   "author": "",

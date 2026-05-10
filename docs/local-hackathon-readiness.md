@@ -35,6 +35,17 @@ It verifies sample cases such as:
 - pediatric fever and vomiting routing to urgent care
 - moderate headache and dizziness routing to primary care
 
+## FHIR Evidence Pack Check
+
+Run the FHIR evidence validation:
+
+```powershell
+cd backend
+npm run eval:fhir
+```
+
+This validates example interoperability payloads located in `backend/examples/fhir/` and supports standards-oriented judging evidence.
+
 ## Remaining Prompt Opinion Work
 
 The main submission gap is still external integration:

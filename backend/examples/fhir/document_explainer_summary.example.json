@@ -1,0 +1,61 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "identifier": {
+    "system": "urn:aethermed:session",
+    "value": "example-session-document-001"
+  },
+  "meta": {
+    "lastUpdated": "2026-05-10T12:02:00.000Z"
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:obs-doc-1",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "Document explanation summary"
+        },
+        "valueString": "Report text was simplified into patient-friendly language."
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:impression-doc-1",
+      "resource": {
+        "resourceType": "ClinicalImpression",
+        "status": "completed",
+        "description": "Medical document context reviewed for safety and clarity.",
+        "summary": "The explanation preserved source meaning and surfaced warning items for follow-up."
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:careplan-doc-1",
+      "resource": {
+        "resourceType": "CarePlan",
+        "status": "active",
+        "intent": "proposal",
+        "activity": [
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "description": "Review highlighted findings with the prescribing clinician or clinic."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:communication-doc-1",
+      "resource": {
+        "resourceType": "Communication",
+        "status": "completed",
+        "payload": [
+          {
+            "contentString": "This explanation is educational and does not replace your original clinical report."
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -5,6 +5,8 @@ import { Send, Plus, History, Settings, User, Clock, AlertCircle, Menu, X, Mic, 
 import ReportCard from './components/ReportCard';
 import VisualReportCard from './components/VisualReportCard';
 import DocumentReportCard from './components/DocumentReportCard';
+import DrugCheckerCard from './components/DrugCheckerCard';
+import MentalSupportCard from './components/MentalSupportCard';
 import SafetyBanner from './components/SafetyBanner';
 import WorkflowTimeline from './components/WorkflowTimeline';
 import UploadDropzone from './components/UploadDropzone';
@@ -23,6 +25,7 @@ const APP_NAME = 'AetherMed Agentic';
 const MAX_VISUAL_IMAGE_SIZE_MB = 6;
 const MAX_DOCUMENT_IMAGE_SIZE_MB = 6;
 const MAX_UPLOAD_ASSISTANT_IMAGE_SIZE_MB = 6;
+const MAX_DRUG_IMAGE_SIZE_MB = 6;
 const MAX_DOCUMENT_TEXT_FILE_SIZE_MB = 3;
 const MAX_CAMERA_CAPTURE_EDGE = 1600;
 const CAMERA_CAPTURE_QUALITY = 0.84;
@@ -57,21 +60,25 @@ const DEMO_CASES = [
     urgency: 2
   }
 ];
+const SHARED_FEATURE_HIGHLIGHTS = [
+  { label: 'Drug Checker', text: 'Prevent fake drug usage.' },
+  { label: 'Mental Support', text: 'Emotional safety.' }
+];
 const ASSESSMENT_MODE_CONFIG = {
   text: {
-    heroTitle: 'Multi-agent symptom intake built for safe, structured clinical guidance',
-    heroDescription: 'AetherMed translates free-text symptoms into a staged healthcare workflow with visible risk review, research-backed synthesis, and clear next steps.',
-    helperTitle: 'Symptom intake',
-    helperText: 'Best for direct symptom descriptions when you want a judge to see risk review, agent orchestration, and structured recommendations in one flow.',
+    heroTitle: 'Smart health message intake that can route symptoms, medicine concerns, or emotional distress safely',
+    heroDescription: 'AetherMed reviews the user message, detects the likely healthcare intent, and routes it into symptom guidance, drug safety, or emotional support while keeping the response safety-first.',
+    helperTitle: 'Health message',
+    helperText: 'Best when the user starts with free text. If the message sounds like a medicine issue or emotional distress, AetherMed can route it beyond standard symptom triage.',
     features: [
-      { label: 'Workflow visibility', text: 'Shows how symptoms are analyzed, risk-scored, and converted into safe guidance.' },
+      { label: 'Intent routing', text: 'Routes the same text box into symptom analysis, drug safety, or mental support depending on what the user says.' },
       { label: 'Multilingual context', text: 'Language handling is surfaced throughout the intake and final response.' },
       { label: 'Clinical framing', text: 'Results are packaged into cards, not one long chatbot paragraph.' }
     ],
-    loadingTitle: 'AetherMed is reviewing the symptom intake',
-    loadingDescription: 'The system is normalizing the report, assessing urgency, gathering supporting insights, and packaging safe next steps.',
-    submitLabel: 'Generate clinical guidance',
-    disabledMessage: 'Describe symptoms to start the decision-support workflow.'
+    loadingTitle: 'AetherMed is routing the health message safely',
+    loadingDescription: 'The system is checking the user’s intent, prioritizing risk, and sending the request to the safest internal workflow.',
+    submitLabel: 'Route message safely',
+    disabledMessage: 'Describe the health concern to start the intent-aware workflow.'
   },
   upload: {
     heroTitle: 'A single upload path that routes images and documents safely',
@@ -117,6 +124,36 @@ const ASSESSMENT_MODE_CONFIG = {
     loadingDescription: 'The system is reading the source material, extracting important findings, and drafting a safer plain-language explanation.',
     submitLabel: 'Explain document clearly',
     disabledMessage: 'Upload a document or paste text to continue.'
+  },
+  drug: {
+    heroTitle: 'Drug safety checks with package image review and barcode-aware context',
+    heroDescription: 'AetherMed screens medicine packaging, suspicious details, barcode text, and user notes for safer counterfeit-risk guidance without certifying authenticity.',
+    helperTitle: 'Drug safety',
+    helperText: 'Best for medicine names, suspicious packages, barcodes, seller concerns, and general side-effect safety guidance that should not become a prescription conversation.',
+    features: [
+      { label: 'Package review', text: 'Upload or capture a drug package image for additional non-certifying safety signals.' },
+      { label: 'Barcode support', text: 'Add or auto-detect barcode text when available for stronger verification context.' },
+      { label: 'Safer guidance', text: 'Returns warning signs, side-effect cautions, and practical verification steps.' }
+    ],
+    loadingTitle: 'AetherMed is reviewing the medicine details safely',
+    loadingDescription: 'The system is checking the medicine context, suspicious signals, and safer verification steps without claiming authenticity.',
+    submitLabel: 'Run drug safety check',
+    disabledMessage: 'Provide a drug name, package image, barcode, or notes to continue.'
+  },
+  mental: {
+    heroTitle: 'Emotional support routing with calm guidance and urgent escalation when needed',
+    heroDescription: 'AetherMed can respond to emotional distress with grounding, support, and clearer next steps while escalating immediately when safety is uncertain.',
+    helperTitle: 'Mental support',
+    helperText: 'Best when the user sounds scared, overwhelmed, hopeless, anxious, or unsafe and needs calm, practical, non-therapeutic support.',
+    features: [
+      { label: 'Emotional safety', text: 'Moves quickly from validation into concrete grounding and real-world support.' },
+      { label: 'Risk escalation', text: 'Self-harm or immediate danger language triggers urgent human-support guidance.' },
+      { label: 'Simple structure', text: 'The response stays calm, short, and usable in difficult moments.' }
+    ],
+    loadingTitle: 'AetherMed is preparing emotional safety guidance',
+    loadingDescription: 'The system is assessing distress signals, building grounding steps, and checking whether urgent escalation is needed.',
+    submitLabel: 'Get emotional support guidance',
+    disabledMessage: 'Describe what feels hard right now to continue.'
   }
 };
 const WORKFLOW_STEPS = {
@@ -147,7 +184,29 @@ const WORKFLOW_STEPS = {
     { id: 'insights', title: 'Gathering insights', description: 'Turning complex terminology into clear plain-language meaning.' },
     { id: 'recommendations', title: 'Generating recommendations', description: 'Highlighting follow-up actions and safer explanation framing.' },
     { id: 'next', title: 'Suggesting next steps', description: 'Packaging the explanation into structured document cards.' }
+  ],
+  drug: [
+    { id: 'analyze', title: 'Reviewing medicine details', description: 'Inspecting the package image, barcode text, and user-provided medicine context.' },
+    { id: 'risk', title: 'Assessing counterfeit risk', description: 'Checking for suspicious details, unsafe side effects, and verification gaps.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Separating safe screening cues from anything that requires a pharmacist or clinician.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Preparing safer verification checks and practical warning guidance.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Packaging the medicine review into a structured drug safety card.' }
+  ],
+  mental: [
+    { id: 'analyze', title: 'Reading the message', description: 'Understanding the current emotional state and immediate safety concern.' },
+    { id: 'risk', title: 'Assessing risk', description: 'Checking for self-harm, crisis signals, or other urgent emotional danger.' },
+    { id: 'insights', title: 'Gathering insights', description: 'Choosing the safest grounding, support, and escalation path.' },
+    { id: 'recommendations', title: 'Generating recommendations', description: 'Preparing supportive language, grounding steps, and follow-up guidance.' },
+    { id: 'next', title: 'Suggesting next steps', description: 'Delivering a structured emotional support response.' }
   ]
+};
+const WORKFLOW_AGENTS = {
+  text: ['Intent Router', 'Translation', 'Triage', 'Research', 'Advice', 'Referral', 'Response'],
+  upload: ['Upload Router', 'Visual Assessment', 'Medical Document Assistant', 'Drug Checker', 'Response'],
+  visual: ['Visual Assessment'],
+  document: ['Medical Document Assistant'],
+  drug: ['Drug Checker'],
+  mental: ['Mental Support']
 };
 let cachedHealthRequest = null;
 
@@ -260,6 +319,35 @@ function buildDefaultUserSettings() {
 }
 
 function buildFallbackUploadAssistantProfile(sourceLabel = 'Uploaded image') {
+  const lowerSource = String(sourceLabel || '').toLowerCase();
+  const looksLikeDrug = /drug|medicine|pill|tablet|capsule|pharmacy|barcode|pack/.test(lowerSource);
+
+  if (looksLikeDrug) {
+    return {
+      classification: {
+        kind: 'drug',
+        code: 'drug_packaging',
+        label: 'Drug package or barcode image',
+        reason: 'The filename or source suggests a medicine package or barcode.'
+      },
+      guidance: {
+        detectedInputType: 'Drug package or barcode image',
+        routeCode: 'drug_packaging',
+        disclaimer: 'AetherMed provides guidance and counterfeit-risk screening, not a guarantee that a medicine is genuine.',
+        supportiveIntro: 'This looks like a medicine package or barcode image, so the upload can be routed into drug safety review.',
+        minimumContextLabel: 'What should be checked?',
+        minimumContextPlaceholder: 'For example: suspicious packaging, missing expiry date, side effects after taking it, or barcode verification.',
+        supportNote: 'Add the drug name, barcode, seller details, or unusual packaging details if you have them.'
+      },
+      autoContext: {
+        summary: 'This looks like a medicine package, label, or barcode image.',
+        suggestedContext: 'This appears to be a medicine package, label, or barcode that I want reviewed for safer drug guidance.',
+        source: 'fallback'
+      },
+      sourceLabel
+    };
+  }
+
   return {
     classification: {
       kind: 'visual',
@@ -314,6 +402,53 @@ function getHealthStatus() {
   return cachedHealthRequest;
 }
 
+async function loadImageBitmapFromDataUrl(dataUrl) {
+  const response = await fetch(dataUrl);
+  const blob = await response.blob();
+  return createImageBitmap(blob);
+}
+
+async function detectBarcodeFromDataUrl(dataUrl) {
+  if (typeof window === 'undefined' || typeof window.BarcodeDetector === 'undefined') {
+    return {
+      supported: false,
+      codes: [],
+      message: 'Barcode auto-detection is not available in this browser. You can still type the barcode manually.'
+    };
+  }
+
+  try {
+    const formats = typeof window.BarcodeDetector.getSupportedFormats === 'function'
+      ? await window.BarcodeDetector.getSupportedFormats()
+      : ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
+    const preferredFormats = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128', 'code_39', 'qr_code'];
+    const usableFormats = preferredFormats.filter((format) => formats.includes(format));
+    const detector = new window.BarcodeDetector({
+      formats: usableFormats.length ? usableFormats : formats
+    });
+    const bitmap = await loadImageBitmapFromDataUrl(dataUrl);
+    const results = await detector.detect(bitmap);
+    bitmap.close?.();
+    const codes = results
+      .map((item) => String(item.rawValue || '').trim())
+      .filter(Boolean);
+
+    return {
+      supported: true,
+      codes,
+      message: codes.length
+        ? `Detected ${codes.length === 1 ? 'a barcode' : `${codes.length} barcode values`} from the uploaded image.`
+        : 'No readable barcode was detected from the image.'
+    };
+  } catch {
+    return {
+      supported: true,
+      codes: [],
+      message: 'Barcode detection could not read a clear code from this image. You can enter it manually.'
+    };
+  }
+}
+
 function App() {
   const [clientId, setClientId] = useState(() => ensureClientId());
   const [userSettings, setUserSettings] = useState(() => {
@@ -331,6 +466,13 @@ function App() {
   const [documentNotes, setDocumentNotes] = useState('');
   const [documentImageDataUrl, setDocumentImageDataUrl] = useState('');
   const [documentImageName, setDocumentImageName] = useState('');
+  const [drugName, setDrugName] = useState('');
+  const [drugMessage, setDrugMessage] = useState('');
+  const [drugNotes, setDrugNotes] = useState('');
+  const [drugBarcodeValue, setDrugBarcodeValue] = useState('');
+  const [drugBarcodeStatus, setDrugBarcodeStatus] = useState('');
+  const [drugImageDataUrl, setDrugImageDataUrl] = useState('');
+  const [drugImageName, setDrugImageName] = useState('');
   const [uploadAssistantImageDataUrl, setUploadAssistantImageDataUrl] = useState('');
   const [uploadAssistantImageName, setUploadAssistantImageName] = useState('');
   const [uploadAssistantContext, setUploadAssistantContext] = useState('');
@@ -346,6 +488,10 @@ function App() {
   const [report, setReport] = useState(null);
   const [visualResult, setVisualResult] = useState(null);
   const [documentResult, setDocumentResult] = useState(null);
+  const [drugResult, setDrugResult] = useState(null);
+  const [mentalMessage, setMentalMessage] = useState('');
+  const [mentalSessionMessages, setMentalSessionMessages] = useState([]);
+  const [mentalResult, setMentalResult] = useState(null);
   const [error, setError] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showLogs, setShowLogs] = useState(false);
@@ -363,12 +509,11 @@ function App() {
   // Voice Interaction State
   const [listeningField, setListeningField] = useState(null); // 'symptoms' | 'notes' | null
 
-  const agents = ['Translation', 'Triage', 'Research', 'Advice', 'Referral', 'Response'];
   const pageTitles = {
     assessment: {
       eyebrow: 'Multi-agent medical decision support',
       title: 'Structured triage, multimodal intake, and safer next-step guidance',
-      description: 'Choose symptom intake, upload routing, image review, or document explanation and present the workflow as a credible clinical support system.'
+      description: 'Choose smart text intake, upload routing, image review, document explanation, drug safety, or emotional support and present the workflow as a credible clinical support system.'
     },
     history: {
       eyebrow: 'Past sessions',
@@ -390,20 +535,26 @@ function App() {
   const urgencyPercent = ((Number(urgency) - 1) / 4) * 100;
   const currentModeConfig = ASSESSMENT_MODE_CONFIG[assessmentMode];
   const workflowSteps = WORKFLOW_STEPS[assessmentMode] || WORKFLOW_STEPS.text;
+  const workflowAgents = WORKFLOW_AGENTS[assessmentMode] || WORKFLOW_AGENTS.text;
   const workflowCompletedCount = Math.min(completedAgents.length, workflowSteps.length);
   const workflowActiveIndex = loading ? Math.min(workflowCompletedCount, workflowSteps.length - 1) : -1;
   const activeWorkflowInsight = currentInsights[currentInsights.length - 1] || currentModeConfig.loadingDescription;
+  const featureHighlights = [...currentModeConfig.features, ...SHARED_FEATURE_HIGHLIGHTS];
   const detectedInterfaceLanguage = typeof navigator !== 'undefined'
     ? formatDetectedLanguage(navigator.language)
     : 'English';
-  const hasAssessmentResult = Boolean(report || visualResult || documentResult);
+  const hasAssessmentResult = Boolean(report || visualResult || documentResult || drugResult || mentalResult);
   const submitDisabledReason = assessmentMode === 'text'
     ? (!symptoms.trim() ? currentModeConfig.disabledMessage : '')
     : assessmentMode === 'upload'
       ? (!uploadAssistantImageDataUrl ? currentModeConfig.disabledMessage : uploadAssistantDetecting ? 'AetherMed is still classifying the upload before you continue.' : '')
       : assessmentMode === 'visual'
         ? (!visualImageDataUrl ? currentModeConfig.disabledMessage : '')
-        : ((!documentImageDataUrl && !documentText.trim()) ? currentModeConfig.disabledMessage : '');
+        : assessmentMode === 'document'
+          ? ((!documentImageDataUrl && !documentText.trim()) ? currentModeConfig.disabledMessage : '')
+          : assessmentMode === 'drug'
+            ? ((!drugName.trim() && !drugMessage.trim() && !drugNotes.trim() && !drugImageDataUrl && !drugBarcodeValue.trim()) ? currentModeConfig.disabledMessage : '')
+            : (!mentalMessage.trim() ? currentModeConfig.disabledMessage : '');
 
   useEffect(() => {
     try {
@@ -440,6 +591,10 @@ function App() {
     setReport(null);
     setVisualResult(null);
     setDocumentResult(null);
+    setDrugResult(null);
+    setMentalMessage('');
+    setMentalSessionMessages([]);
+    setMentalResult(null);
     setError(null);
     setSymptoms('');
     setNotes('');
@@ -450,6 +605,13 @@ function App() {
     setDocumentNotes('');
     setDocumentImageDataUrl('');
     setDocumentImageName('');
+    setDrugName('');
+    setDrugMessage('');
+    setDrugNotes('');
+    setDrugBarcodeValue('');
+    setDrugBarcodeStatus('');
+    setDrugImageDataUrl('');
+    setDrugImageName('');
     setUploadAssistantImageDataUrl('');
     setUploadAssistantImageName('');
     setUploadAssistantContext('');
@@ -656,6 +818,10 @@ function App() {
     setReport(null);
     setVisualResult(null);
     setDocumentResult(null);
+    setDrugResult(null);
+    setMentalMessage('');
+    setMentalSessionMessages([]);
+    setMentalResult(null);
     setError(null);
     setSymptoms('');
     setNotes('');
@@ -666,6 +832,13 @@ function App() {
     setDocumentNotes('');
     setDocumentImageDataUrl('');
     setDocumentImageName('');
+    setDrugName('');
+    setDrugMessage('');
+    setDrugNotes('');
+    setDrugBarcodeValue('');
+    setDrugBarcodeStatus('');
+    setDrugImageDataUrl('');
+    setDrugImageName('');
     setUploadAssistantImageDataUrl('');
     setUploadAssistantImageName('');
     setUploadAssistantContext('');
@@ -692,9 +865,78 @@ function App() {
     setReport(null);
     setVisualResult(null);
     setDocumentResult(null);
+    setDrugResult(null);
+    setMentalMessage('');
+    setMentalSessionMessages([]);
+    setMentalResult(null);
     setError(null);
     setView('assessment');
     setIsSidebarOpen(false);
+  };
+
+  const clearAssessmentResults = () => {
+    setReport(null);
+    setVisualResult(null);
+    setDocumentResult(null);
+    setDrugResult(null);
+    setMentalResult(null);
+  };
+
+  const persistHistoryItem = (newHistoryItem) => {
+    setSessionHistory((prev) => {
+      const updated = [newHistoryItem, ...prev];
+      window.localStorage.setItem(
+        getScopedStorageKey(HISTORY_STORAGE_NAMESPACE, clientId),
+        JSON.stringify(updated)
+      );
+      return updated;
+    });
+  };
+
+  const applyResponseResult = (responsePayload) => {
+    const resultData = responsePayload?.data;
+    const analysisType = responsePayload?.meta?.analysisType;
+    clearAssessmentResults();
+
+    if (analysisType === 'drug_checker') {
+      setDrugResult(resultData);
+      return 'drug';
+    }
+
+    if (analysisType === 'mental_support') {
+      setMentalResult(resultData);
+      return 'mental';
+    }
+
+    if (analysisType === 'document') {
+      setDocumentResult(resultData);
+      return 'document';
+    }
+
+    if (analysisType === 'visual' || analysisType === 'medical_imaging') {
+      setVisualResult(resultData);
+      return 'visual';
+    }
+
+    setReport(resultData);
+    return 'text';
+  };
+
+  const enrichDrugInputsFromImage = async (dataUrl, sourceLabel = 'Medicine package image') => {
+    const understanding = await requestImageUnderstanding(dataUrl, sourceLabel);
+    const barcodeScan = await detectBarcodeFromDataUrl(dataUrl);
+
+    setDrugImageDataUrl(dataUrl);
+    setDrugImageName(sourceLabel);
+    if (!drugNotes.trim()) {
+      setDrugNotes(understanding?.autoContext?.suggestedContext || '');
+    }
+    if (barcodeScan.codes.length) {
+      setDrugBarcodeValue((currentValue) => currentValue || barcodeScan.codes[0]);
+    }
+    setDrugBarcodeStatus(barcodeScan.message);
+    setError(null);
+    setDrugResult(null);
   };
 
   const handleAnalyze = async (e) => {
@@ -702,9 +944,7 @@ function App() {
     if (!symptoms.trim()) return;
 
     setLoading(true);
-    setReport(null);
-    setVisualResult(null);
-    setDocumentResult(null);
+    clearAssessmentResults();
     setError(null);
     setCompletedAgents([]);
     setCurrentInsights([]);
@@ -712,11 +952,12 @@ function App() {
     setIsSidebarOpen(false); // Close sidebar on mobile when starting analysis
     
     try {
-      const response = await axios.post(`${API_BASE}/analyze`, { 
-        symptoms, 
+      const response = await axios.post(`${API_BASE}/analyze-message`, { 
+        message: symptoms,
         ageRange, 
         urgency, 
         notes,
+        languageHint: typeof navigator !== 'undefined' ? navigator.language : 'en-US',
         clientId
       });
       
@@ -730,26 +971,19 @@ function App() {
       }
 
       setActiveAgent(null);
-      const reportData = response.data.data;
-      setReport(reportData);
+      const historyKind = applyResponseResult(response.data);
 
       const newHistoryItem = {
           id: response.data.sessionId,
           date: new Date().toLocaleString(),
-          kind: 'text',
+          kind: historyKind,
           summary: symptoms.substring(0, 100) + '...',
           symptoms: symptoms.substring(0, 100) + '...',
           clientId,
-          report: reportData
+          report: historyKind === 'text' ? response.data.data : undefined,
+          result: historyKind !== 'text' ? response.data.data : undefined
       };
-      setSessionHistory(prev => {
-          const updated = [newHistoryItem, ...prev];
-          window.localStorage.setItem(
-            getScopedStorageKey(HISTORY_STORAGE_NAMESPACE, clientId),
-            JSON.stringify(updated)
-          );
-          return updated;
-      });
+      persistHistoryItem(newHistoryItem);
     } catch (err) {
       setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
       console.error(err);
@@ -800,9 +1034,7 @@ function App() {
     if (!visualImageDataUrl) return;
 
     setLoading(true);
-    setReport(null);
-    setVisualResult(null);
-    setDocumentResult(null);
+    clearAssessmentResults();
     setError(null);
     setCompletedAgents([]);
     setCurrentInsights([]);
@@ -842,14 +1074,7 @@ function App() {
         result: resultData
       };
 
-      setSessionHistory((prev) => {
-        const updated = [newHistoryItem, ...prev];
-        window.localStorage.setItem(
-          getScopedStorageKey(HISTORY_STORAGE_NAMESPACE, clientId),
-          JSON.stringify(updated)
-        );
-        return updated;
-      });
+      persistHistoryItem(newHistoryItem);
     } catch (err) {
       setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
       console.error(err);
@@ -878,9 +1103,7 @@ function App() {
     setUploadAssistantImageDataUrl(dataUrl);
     setUploadAssistantImageName(sourceLabel || 'Uploaded file');
     setError(null);
-    setReport(null);
-    setVisualResult(null);
-    setDocumentResult(null);
+    clearAssessmentResults();
 
     const understanding = await requestImageUnderstanding(dataUrl, sourceLabel);
     setUploadAssistantProfile(understanding);
@@ -1045,6 +1268,8 @@ function App() {
         setVisualNotes(imageUnderstanding?.autoContext?.suggestedContext || '');
         setVisualResult(null);
         setError(null);
+      } else if (cameraTarget === 'drug') {
+        await enrichDrugInputsFromImage(dataUrl, 'Medicine camera capture');
       } else {
         await inspectUploadAssistantImage(dataUrl, 'Camera capture');
       }
@@ -1054,12 +1279,16 @@ function App() {
       const fallbackMessage = captureError.response?.data?.error || (
         cameraTarget === 'visual'
           ? 'We could not capture that image clearly. Try again with steadier framing and good lighting.'
+          : cameraTarget === 'drug'
+            ? 'We could not capture that medicine package clearly. Try again with steadier framing and better light.'
           : 'We could not inspect that camera capture. Try again with steadier framing and good lighting.'
       );
       setError(fallbackMessage);
       setCameraError(fallbackMessage);
       if (cameraTarget === 'upload') {
         setUploadAssistantProfile(null);
+      } else if (cameraTarget === 'drug') {
+        setDrugBarcodeStatus('');
       }
     } finally {
       setUploadAssistantDetecting(false);
@@ -1071,9 +1300,7 @@ function App() {
     if (!uploadAssistantImageDataUrl) return;
 
     setLoading(true);
-    setReport(null);
-    setVisualResult(null);
-    setDocumentResult(null);
+    clearAssessmentResults();
     setError(null);
     setCompletedAgents([]);
     setCurrentInsights([]);
@@ -1104,16 +1331,7 @@ function App() {
       setActiveAgent(null);
 
       const resultData = response.data.data;
-      const routedCode = response.data.meta?.routedInputCode;
-      const historyKind = routedCode === 'medical_document' ? 'document' : routedCode === 'text_symptoms' ? 'text' : 'visual';
-
-      if (historyKind === 'document') {
-        setDocumentResult(resultData);
-      } else if (historyKind === 'text') {
-        setReport(resultData);
-      } else {
-        setVisualResult(resultData);
-      }
+      const historyKind = applyResponseResult(response.data);
 
       const summaryText = uploadAssistantContext.trim()
         ? `${uploadAssistantContext.trim().substring(0, 100)}...`
@@ -1128,14 +1346,7 @@ function App() {
         report: historyKind === 'text' ? resultData : undefined
       };
 
-      setSessionHistory((prev) => {
-        const updated = [newHistoryItem, ...prev];
-        window.localStorage.setItem(
-          getScopedStorageKey(HISTORY_STORAGE_NAMESPACE, clientId),
-          JSON.stringify(updated)
-        );
-        return updated;
-      });
+      persistHistoryItem(newHistoryItem);
     } catch (err) {
       setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
       console.error(err);
@@ -1150,9 +1361,7 @@ function App() {
     if (!documentImageDataUrl && !documentText.trim()) return;
 
     setLoading(true);
-    setReport(null);
-    setVisualResult(null);
-    setDocumentResult(null);
+    clearAssessmentResults();
     setError(null);
     setCompletedAgents([]);
     setCurrentInsights([]);
@@ -1195,14 +1404,148 @@ function App() {
         result: resultData
       };
 
-      setSessionHistory((prev) => {
-        const updated = [newHistoryItem, ...prev];
-        window.localStorage.setItem(
-          getScopedStorageKey(HISTORY_STORAGE_NAMESPACE, clientId),
-          JSON.stringify(updated)
-        );
-        return updated;
+      persistHistoryItem(newHistoryItem);
+    } catch (err) {
+      setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
+      console.error(err);
+    } finally {
+      setActiveAgent(null);
+      setLoading(false);
+    }
+  };
+
+  const handleDrugImageChange = async (event) => {
+    const file = event.target.files?.[0];
+    if (!file) {
+      return;
+    }
+
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file for the drug safety review.');
+      return;
+    }
+
+    if (file.size > MAX_DRUG_IMAGE_SIZE_MB * 1024 * 1024) {
+      setError(`Please choose a medicine image smaller than ${MAX_DRUG_IMAGE_SIZE_MB} MB.`);
+      return;
+    }
+
+    try {
+      const dataUrl = await readFileAsDataUrl(file);
+      await enrichDrugInputsFromImage(dataUrl, file.name || 'Medicine package image');
+    } catch (readError) {
+      setError(readError.message || 'We could not read that medicine image. Please try another file.');
+    } finally {
+      event.target.value = '';
+    }
+  };
+
+  const clearDrugImage = () => {
+    setDrugImageDataUrl('');
+    setDrugImageName('');
+    setDrugBarcodeStatus('');
+  };
+
+  const handleDrugAnalyze = async (e) => {
+    e.preventDefault();
+    if (!drugName.trim() && !drugMessage.trim() && !drugNotes.trim() && !drugImageDataUrl && !drugBarcodeValue.trim()) return;
+
+    setLoading(true);
+    clearAssessmentResults();
+    setError(null);
+    setCompletedAgents([]);
+    setCurrentInsights([]);
+    setShowLogs(false);
+    setIsSidebarOpen(false);
+
+    try {
+      const response = await axios.post(`${API_BASE}/check-drug`, {
+        drugName: drugName.trim() || drugMessage.trim(),
+        imageDataUrl: drugImageDataUrl,
+        barcodeValue: drugBarcodeValue,
+        notes: [drugMessage, drugNotes].filter((value) => value && value.trim()).join(' | '),
+        languageHint: typeof navigator !== 'undefined' ? navigator.language : 'en-US',
+        clientId
       });
+
+      const serverTrace = response.data.trace || [];
+
+      for (const step of serverTrace) {
+        setActiveAgent(step.agent);
+        setCurrentInsights((prev) => [...prev, step.insight]);
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        setCompletedAgents((prev) => [...prev, step.agent]);
+      }
+
+      setActiveAgent(null);
+      setDrugResult(response.data.data);
+
+      const newHistoryItem = {
+        id: response.data.sessionId,
+        date: new Date().toLocaleString(),
+        kind: 'drug',
+        summary: (drugName || drugMessage || drugNotes || drugImageName || 'Drug safety review').substring(0, 100) + '...',
+        clientId,
+        result: response.data.data
+      };
+
+      persistHistoryItem(newHistoryItem);
+    } catch (err) {
+      setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
+      console.error(err);
+    } finally {
+      setActiveAgent(null);
+      setLoading(false);
+    }
+  };
+
+  const handleMentalAnalyze = async (e) => {
+    e.preventDefault();
+    if (!mentalMessage.trim()) return;
+
+    setLoading(true);
+    clearAssessmentResults();
+    setError(null);
+    setCompletedAgents([]);
+    setCurrentInsights([]);
+    setShowLogs(false);
+    setIsSidebarOpen(false);
+
+    try {
+      const response = await axios.post(`${API_BASE}/mental-support`, {
+        message: mentalMessage,
+        sessionMessages: mentalSessionMessages,
+        languageHint: typeof navigator !== 'undefined' ? navigator.language : 'en-US',
+        clientId
+      });
+
+      const serverTrace = response.data.trace || [];
+
+      for (const step of serverTrace) {
+        setActiveAgent(step.agent);
+        setCurrentInsights((prev) => [...prev, step.insight]);
+        await new Promise((resolve) => setTimeout(resolve, 700));
+        setCompletedAgents((prev) => [...prev, step.agent]);
+      }
+
+      setActiveAgent(null);
+      setMentalResult(response.data.data);
+      setMentalSessionMessages((prev) => [
+        ...prev,
+        { role: 'user', text: mentalMessage },
+        { role: 'assistant', text: response.data.data?.audioReply || response.data.data?.supportiveResponse || '' }
+      ].filter((entry) => entry.text));
+
+      const newHistoryItem = {
+        id: response.data.sessionId,
+        date: new Date().toLocaleString(),
+        kind: 'mental',
+        summary: mentalMessage.substring(0, 100) + '...',
+        clientId,
+        result: response.data.data
+      };
+
+      persistHistoryItem(newHistoryItem);
     } catch (err) {
       setError(err.response?.data?.error || `Cannot reach the AetherMed backend at ${API_BASE}. Start it with "npm run backend" or run the full app from the project root with "npm run dev".`);
       console.error(err);
@@ -1236,7 +1579,7 @@ function App() {
           <span className="brand-text">AetherMed <span className="brand-accent">Agentic</span></span>
         </div>
         <nav>
-          <button className={`nav-item ${view === 'assessment' ? 'active' : ''}`} onClick={() => { setView('assessment'); setReport(null); setVisualResult(null); setDocumentResult(null); setIsSidebarOpen(false); }}>
+          <button className={`nav-item ${view === 'assessment' ? 'active' : ''}`} onClick={() => { setView('assessment'); clearAssessmentResults(); setIsSidebarOpen(false); }}>
             <Plus size={18} /> New Session
           </button>
           <button className={`nav-item ${view === 'history' ? 'active' : ''}`} onClick={() => { setView('history'); setIsSidebarOpen(false); }}>
@@ -1288,14 +1631,22 @@ function App() {
              <MotionDiv initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="history-view glass" style={{ padding: '32px', width: '100%', maxWidth: '800px', marginTop: '20px', textAlign: 'left' }}>
                 <h2>Session History</h2>
                 {sessionHistory.length === 0 ? (
-                    <p style={{ color: 'var(--text-secondary)', marginTop: '16px' }}>No saved assessments yet. Run a text, visual, or document review to build history.</p>
+                    <p style={{ color: 'var(--text-secondary)', marginTop: '16px' }}>No saved assessments yet. Run a health message, visual, document, drug safety, or mental support review to build history.</p>
                 ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', marginTop: '24px' }}>
                         {sessionHistory.map(session => (
                             <div key={session.id} style={{ background: 'var(--surface-muted)', padding: '20px', borderRadius: '12px', border: '1px solid var(--border-color)' }}>
                                 <div style={{ fontSize: '12px', color: 'var(--text-muted)' }}>{session.date}</div>
                                 <div style={{ fontSize: '11px', color: 'var(--primary)', textTransform: 'uppercase', letterSpacing: '1px', marginTop: '10px' }}>
-                                  {session.kind === 'visual' ? 'Visual review' : session.kind === 'document' ? 'Document explainer' : 'Text assessment'}
+                                  {session.kind === 'visual'
+                                    ? 'Visual review'
+                                    : session.kind === 'document'
+                                      ? 'Document explainer'
+                                      : session.kind === 'drug'
+                                        ? 'Drug safety'
+                                        : session.kind === 'mental'
+                                          ? 'Mental support'
+                                          : 'Text assessment'}
                                 </div>
                                 <div style={{ fontWeight: '500', margin: '12px 0', color: 'var(--text-primary)', fontSize: '15px' }}>"{session.summary || session.symptoms}"</div>
                                 <button
@@ -1304,14 +1655,26 @@ function App() {
                                   onClick={() => {
                                     const isVisualSession = session.kind === 'visual';
                                     const isDocumentSession = session.kind === 'document';
-                                    setAssessmentMode(isVisualSession ? 'visual' : isDocumentSession ? 'document' : 'text');
-                                    setReport(isVisualSession || isDocumentSession ? null : (session.report || session.data));
+                                    const isDrugSession = session.kind === 'drug';
+                                    const isMentalSession = session.kind === 'mental';
+                                    setAssessmentMode(isVisualSession ? 'visual' : isDocumentSession ? 'document' : isDrugSession ? 'drug' : isMentalSession ? 'mental' : 'text');
+                                    setReport(isVisualSession || isDocumentSession || isDrugSession || isMentalSession ? null : (session.report || session.data));
                                     setVisualResult(isVisualSession ? (session.result || session.report || session.data) : null);
                                     setDocumentResult(isDocumentSession ? (session.result || session.report || session.data) : null);
+                                    setDrugResult(isDrugSession ? (session.result || session.report || session.data) : null);
+                                    setMentalResult(isMentalSession ? (session.result || session.report || session.data) : null);
                                     setView('assessment');
                                   }}
                                 >
-                                   {session.kind === 'visual' ? 'Load Visual Review' : session.kind === 'document' ? 'Load Document View' : 'Load Assessment View'}
+                                   {session.kind === 'visual'
+                                     ? 'Load Visual Review'
+                                     : session.kind === 'document'
+                                       ? 'Load Document View'
+                                       : session.kind === 'drug'
+                                         ? 'Load Drug Review'
+                                         : session.kind === 'mental'
+                                           ? 'Load Support View'
+                                           : 'Load Assessment View'}
                                 </button>
                             </div>
                         ))}
@@ -1382,22 +1745,18 @@ function App() {
                   className={`mode-toggle-btn ${assessmentMode === 'text' ? 'active' : ''}`}
                   onClick={() => {
                     setAssessmentMode('text');
-                    setReport(null);
-                    setVisualResult(null);
-                    setDocumentResult(null);
+                    clearAssessmentResults();
                     setError(null);
                   }}
                 >
-                  Text symptoms
+                  Smart intake
                 </button>
                 <button
                   type="button"
                   className={`mode-toggle-btn ${assessmentMode === 'upload' ? 'active' : ''}`}
                   onClick={() => {
                     setAssessmentMode('upload');
-                    setReport(null);
-                    setVisualResult(null);
-                    setDocumentResult(null);
+                    clearAssessmentResults();
                     setError(null);
                   }}
                 >
@@ -1408,9 +1767,7 @@ function App() {
                   className={`mode-toggle-btn ${assessmentMode === 'visual' ? 'active' : ''}`}
                   onClick={() => {
                     setAssessmentMode('visual');
-                    setReport(null);
-                    setVisualResult(null);
-                    setDocumentResult(null);
+                    clearAssessmentResults();
                     setError(null);
                   }}
                 >
@@ -1421,13 +1778,33 @@ function App() {
                   className={`mode-toggle-btn ${assessmentMode === 'document' ? 'active' : ''}`}
                   onClick={() => {
                     setAssessmentMode('document');
-                    setReport(null);
-                    setVisualResult(null);
-                    setDocumentResult(null);
+                    clearAssessmentResults();
                     setError(null);
                   }}
                 >
                   Document explainer
+                </button>
+                <button
+                  type="button"
+                  className={`mode-toggle-btn ${assessmentMode === 'drug' ? 'active' : ''}`}
+                  onClick={() => {
+                    setAssessmentMode('drug');
+                    clearAssessmentResults();
+                    setError(null);
+                  }}
+                >
+                  Drug safety
+                </button>
+                <button
+                  type="button"
+                  className={`mode-toggle-btn ${assessmentMode === 'mental' ? 'active' : ''}`}
+                  onClick={() => {
+                    setAssessmentMode('mental');
+                    clearAssessmentResults();
+                    setError(null);
+                  }}
+                >
+                  Emotional support
                 </button>
               </div>
 
@@ -1441,7 +1818,11 @@ function App() {
                         ? 'Submit a clear photo for visible symptom review'
                         : assessmentMode === 'document'
                           ? 'Upload a document for plain-language explanation'
-                          : 'Describe symptoms to begin the assessment'}
+                          : assessmentMode === 'drug'
+                            ? 'Scan or upload a medicine package for safer drug review'
+                            : assessmentMode === 'mental'
+                              ? 'Describe the emotional strain to get calm support'
+                              : 'Describe the health concern to begin the assessment'}
                   </h2>
                   <p className="hero-text">{currentModeConfig.helperText}</p>
                 </div>
@@ -1451,7 +1832,7 @@ function App() {
                     <Shield size={18} />
                     <div>
                       <strong>Safety-first</strong>
-                      <span>{assessmentMode === 'upload' ? 'Built to guide and route uploads safely, not diagnose from a file alone.' : assessmentMode === 'visual' ? 'Built to describe visible findings cautiously, not diagnose from a photo.' : assessmentMode === 'document' ? 'Built to explain the report in plain language, not replace the doctor’s note.' : 'Built to escalate red flags, not guess diagnoses.'}</span>
+                      <span>{assessmentMode === 'upload' ? 'Built to guide and route uploads safely, not diagnose from a file alone.' : assessmentMode === 'visual' ? 'Built to describe visible findings cautiously, not diagnose from a photo.' : assessmentMode === 'document' ? 'Built to explain the report in plain language, not replace the doctor’s note.' : assessmentMode === 'drug' ? 'Built to screen for counterfeit-risk signals, not certify a medicine as genuine.' : assessmentMode === 'mental' ? 'Built to support emotional safety, not replace emergency or crisis care.' : 'Built to escalate red flags, not guess diagnoses.'}</span>
                     </div>
                   </div>
                   <div className="trust-card">
@@ -1494,12 +1875,31 @@ function App() {
                     <strong>Photo tips</strong>
                     <span>Use bright natural light, keep the area in focus, and include the full visible problem in frame.</span>
                   </div>
+                ) : assessmentMode === 'drug' ? (
+                  <div className="visual-tips">
+                    <strong>Drug safety tips</strong>
+                    <span>Show the front label, expiry, batch area, and any barcode clearly. Add where it was bought if authenticity is part of the concern.</span>
+                  </div>
+                ) : assessmentMode === 'mental' ? (
+                  <div className="visual-tips">
+                    <strong>Support tips</strong>
+                    <span>Describe what feels hardest right now. If safety is uncertain or self-harm is on your mind, say that clearly so AetherMed can escalate appropriately.</span>
+                  </div>
                 ) : (
                   <div className="visual-tips">
                     <strong>Document tips</strong>
                     <span>Use a straight, well-lit screenshot or photo, or paste the exact report text if you have it. Crop out unrelated content when possible.</span>
                   </div>
                 )}
+
+                <div className="feature-grid" aria-label="Feature highlights">
+                  {featureHighlights.map((feature) => (
+                    <div key={feature.label} className="feature-card">
+                      <strong>{feature.label}</strong>
+                      <span>{feature.text}</span>
+                    </div>
+                  ))}
+                </div>
 
                 <div className="hero-workflow-preview">
                   <WorkflowTimeline
@@ -1508,7 +1908,7 @@ function App() {
                     description="The interface exposes the internal review logic before any response is generated, so the product feels like a real decision-support system."
                     steps={workflowSteps}
                     activeInsight="The staged workflow gives judges a clear sense of intelligence, orchestration, and safety boundaries."
-                    agents={agents}
+                    agents={workflowAgents}
                     completedAgents={[]}
                   />
                 </div>
@@ -1563,12 +1963,12 @@ function App() {
 
                   <div className="form-field">
                     <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                      <label>Primary Symptoms</label>
+                      <label>Health Message</label>
                       <button 
                         type="button" 
                         className={`mic-btn ${listeningField === 'symptoms' ? 'recording' : ''}`}
                         onClick={() => startListening('symptoms', setSymptoms, symptoms)}
-                        title="Dictate symptoms"
+                        title="Dictate health message"
                       >
                         {listeningField === 'symptoms' ? <Mic size={16} /> : <MicOff size={16} />}
                       </button>
@@ -1576,7 +1976,7 @@ function App() {
                     <textarea 
                       value={symptoms}
                       onChange={(e) => setSymptoms(e.target.value)}
-                      placeholder="e.g., Intense chest pain with shortness of breath for the last 20 minutes..."
+                      placeholder="e.g., tight chest pain for 20 minutes, is this antibiotic fake, or I feel overwhelmed and unsafe..."
                       rows={3}
                       required
                     />
@@ -1597,16 +1997,16 @@ function App() {
                     <textarea 
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
-                      placeholder="e.g., History of hypertension..."
+                      placeholder="e.g., history of hypertension, where the drug was bought, or anything that makes the situation clearer..."
                       rows={2}
                     />
                   </div>
 
                   <button type="submit" disabled={!symptoms.trim() || loading} className="primary-submit">
-                    {loading ? 'Reviewing symptoms...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
+                    {loading ? 'Routing message...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
                   </button>
                   <div className="support-note">
-                    {submitDisabledReason || 'If symptoms feel life-threatening, skip this tool and call local emergency services immediately.'}
+                    {submitDisabledReason || 'If the message includes chest pain, breathing trouble, severe bleeding, stroke signs, or suicidal intent, seek emergency help immediately.'}
                   </div>
                 </form>
               ) : assessmentMode === 'upload' ? (
@@ -1741,7 +2141,7 @@ function App() {
                     {submitDisabledReason || 'If there is trouble breathing, severe pain, rapidly spreading swelling, heavy bleeding, or facial involvement, seek urgent medical care immediately.'}
                   </div>
                 </form>
-              ) : (
+              ) : assessmentMode === 'document' ? (
                 <form onSubmit={handleDocumentAnalyze} className="input-group glass">
                   <div className="form-field">
                     <label>Upload a document screenshot or photo</label>
@@ -1803,6 +2203,133 @@ function App() {
                     {submitDisabledReason || 'If the document says emergency, critical, urgent referral, or severe abnormal findings, contact the issuing clinic or seek medical care promptly.'}
                   </div>
                 </form>
+              ) : assessmentMode === 'drug' ? (
+                <form onSubmit={handleDrugAnalyze} className="input-group glass">
+                  <div className="form-row">
+                    <div className="form-field">
+                      <label>Drug name</label>
+                      <textarea
+                        value={drugName}
+                        onChange={(e) => setDrugName(e.target.value)}
+                        placeholder="e.g., Augmentin, amoxicillin capsules, malaria medicine..."
+                        rows={2}
+                      />
+                    </div>
+                    <div className="form-field">
+                      <label>Barcode or printed code</label>
+                      <textarea
+                        value={drugBarcodeValue}
+                        onChange={(e) => setDrugBarcodeValue(e.target.value)}
+                        placeholder="Type the barcode if you have it, or let AetherMed try to read it from the image."
+                        rows={2}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="form-field">
+                    <label>What do you want checked?</label>
+                    <textarea
+                      value={drugMessage}
+                      onChange={(e) => setDrugMessage(e.target.value)}
+                      placeholder="e.g., Is this drug real, what warning signs matter, or could this side effect be dangerous?"
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="form-field">
+                    <label>Upload or capture a drug image</label>
+                    <UploadDropzone
+                      icon="image"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={handleDrugImageChange}
+                      title="Choose a medicine package or barcode image"
+                      description={`JPG, PNG, or HEIC up to ${MAX_DRUG_IMAGE_SIZE_MB} MB. Best for boxes, blister packs, bottle labels, seals, batch numbers, and barcodes.`}
+                      helperItems={['Barcode-aware', 'Package review', 'Counterfeit-risk screen']}
+                    />
+                    <div className="profile-actions" style={{ marginTop: '10px' }}>
+                      <button type="button" className="profile-action-btn" onClick={() => openDirectCamera('drug')}>
+                        <Camera size={16} /> Scan package or barcode
+                      </button>
+                    </div>
+                    <div className="form-note">
+                      AetherMed can use the package image as extra context, but it will not certify the drug as genuine.
+                    </div>
+                  </div>
+
+                  {drugImageDataUrl && (
+                    <div className="image-preview-wrap">
+                      <img className="image-preview" src={drugImageDataUrl} alt="Selected drug package preview" />
+                      <div className="image-preview-meta">
+                        <strong>{drugImageName || 'Medicine image'}</strong>
+                        <span>Include the product name, seal, expiry, batch area, and barcode as clearly as possible.</span>
+                        <button type="button" className="reset-btn inline-reset" onClick={clearDrugImage}>
+                          Remove image
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {drugBarcodeStatus && (
+                    <div className="visual-loading-card ready-state">
+                      <strong>Barcode detection</strong>
+                      <p>{drugBarcodeStatus}</p>
+                    </div>
+                  )}
+
+                  <div className="form-field">
+                    <label>Package notes or seller context</label>
+                    <textarea
+                      value={drugNotes}
+                      onChange={(e) => setDrugNotes(e.target.value)}
+                      placeholder="e.g., bought from an open market, seal looked broken, expiry print is unclear, or this was bought online..."
+                      rows={3}
+                    />
+                  </div>
+
+                  <button type="submit" disabled={(!drugName.trim() && !drugMessage.trim() && !drugNotes.trim() && !drugImageDataUrl && !drugBarcodeValue.trim()) || loading} className="primary-submit">
+                    {loading ? 'Reviewing medicine...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
+                  </button>
+                  <div className="support-note">
+                    {submitDisabledReason || 'If the medicine may already have caused trouble breathing, swelling, fainting, chest pain, or another severe reaction, seek urgent medical care immediately.'}
+                  </div>
+                </form>
+              ) : (
+                <form onSubmit={handleMentalAnalyze} className="input-group glass">
+                  <div className="form-field">
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <label>What feels hardest right now?</label>
+                      <button 
+                        type="button" 
+                        className={`mic-btn ${listeningField === 'mental' ? 'recording' : ''}`}
+                        onClick={() => startListening('mental', setMentalMessage, mentalMessage)}
+                        title="Dictate support message"
+                      >
+                        {listeningField === 'mental' ? <Mic size={16} /> : <MicOff size={16} />}
+                      </button>
+                    </div>
+                    <textarea
+                      value={mentalMessage}
+                      onChange={(e) => setMentalMessage(e.target.value)}
+                      placeholder="e.g., I feel overwhelmed and cannot calm down, I feel hopeless, or I do not feel safe being alone..."
+                      rows={4}
+                    />
+                  </div>
+
+                  {mentalSessionMessages.length > 0 && (
+                    <div className="visual-loading-card">
+                      <strong>Recent support context</strong>
+                      <p>The next support response will use the recent session context to stay consistent and grounded.</p>
+                    </div>
+                  )}
+
+                  <button type="submit" disabled={!mentalMessage.trim() || loading} className="primary-submit">
+                    {loading ? 'Preparing support...' : <><Send size={18} /> {currentModeConfig.submitLabel}</>}
+                  </button>
+                  <div className="support-note">
+                    {submitDisabledReason || 'If you may act on self-harm or suicide thoughts, move toward another person and contact local emergency or crisis support immediately.'}
+                  </div>
+                </form>
               )}
             </MotionDiv>
           )}
@@ -1861,7 +2388,7 @@ function App() {
                 completedCount={workflowCompletedCount}
                 activeAgent={activeAgent}
                 activeInsight={activeWorkflowInsight}
-                agents={agents}
+                agents={workflowAgents}
                 completedAgents={completedAgents}
               />
 
@@ -1904,8 +2431,16 @@ function App() {
 
           {view === 'assessment' && hasAssessmentResult && (
             <div className="results-container">
-              {report ? <ReportCard data={report} /> : visualResult ? <VisualReportCard data={visualResult} /> : <DocumentReportCard data={documentResult} />}
-              <button className="reset-btn" onClick={() => { setReport(null); setVisualResult(null); setDocumentResult(null); }}>
+              {report
+                ? <ReportCard data={report} />
+                : visualResult
+                  ? <VisualReportCard data={visualResult} />
+                  : documentResult
+                    ? <DocumentReportCard data={documentResult} />
+                    : drugResult
+                      ? <DrugCheckerCard data={drugResult} />
+                      : <MentalSupportCard data={mentalResult} />}
+              <button className="reset-btn" onClick={() => { clearAssessmentResults(); }}>
                 <Plus size={18} /> New Assessment
               </button>
             </div>
@@ -1928,7 +2463,7 @@ function App() {
               exit={{ opacity: 0, y: 12, scale: 0.98 }}
             >
               <div className="view-header" style={{ marginBottom: '16px' }}>
-                <h3>{cameraTarget === 'visual' ? 'Capture image for direct review' : 'Scan with camera'}</h3>
+                <h3>{cameraTarget === 'visual' ? 'Capture image for direct review' : cameraTarget === 'drug' ? 'Scan medicine package or barcode' : 'Scan with camera'}</h3>
                 <button type="button" className="reset-btn" style={{ marginTop: 0 }} onClick={closeDirectCamera}>
                   <X size={16} /> Close
                 </button>
@@ -1936,6 +2471,8 @@ function App() {
               <p className="loading-copy">
                 {cameraTarget === 'visual'
                   ? 'Point the camera at the visible skin or body issue. AetherMed will place the capture straight into image review so you can add context and analyze it safely.'
+                  : cameraTarget === 'drug'
+                    ? 'Point the camera at the medicine package, label, seal, or barcode. AetherMed will add the capture to drug safety review and try to read a barcode when the browser supports it.'
                   : 'Point the camera at the skin issue, medical report, or scan. AetherMed will route it to the right workflow and still provide guidance, not diagnosis.'}
               </p>
               <div className="camera-preview-shell">
@@ -1956,15 +2493,15 @@ function App() {
               </div>
               <p className="camera-status-note">
                 {cameraReady
-                  ? `Camera ready. The ${cameraTarget === 'visual' ? 'image review capture' : 'upload assistant capture'} will be automatically resized for a reliable upload.`
+                  ? `Camera ready. The ${cameraTarget === 'visual' ? 'image review capture' : cameraTarget === 'drug' ? 'drug safety capture' : 'upload assistant capture'} will be automatically resized for a reliable upload.`
                   : 'Preparing the live camera preview for capture...'}
               </p>
               <div className="profile-actions">
                 <button type="button" className="profile-action-btn" onClick={captureFromCamera} disabled={Boolean(cameraError) || !cameraReady || uploadAssistantDetecting}>
-                  <Camera size={16} /> {uploadAssistantDetecting ? (cameraTarget === 'visual' ? 'Saving capture...' : 'Inspecting capture...') : cameraReady ? (cameraTarget === 'visual' ? 'Capture for image review' : 'Capture and route') : 'Preparing camera...'}
+                  <Camera size={16} /> {uploadAssistantDetecting ? (cameraTarget === 'visual' ? 'Saving capture...' : cameraTarget === 'drug' ? 'Scanning package...' : 'Inspecting capture...') : cameraReady ? (cameraTarget === 'visual' ? 'Capture for image review' : cameraTarget === 'drug' ? 'Capture for drug safety' : 'Capture and route') : 'Preparing camera...'}
                 </button>
                 <button type="button" className="profile-action-btn" onClick={closeDirectCamera}>
-                  {cameraTarget === 'visual' ? 'Use regular image upload' : 'Use regular upload'}
+                  {cameraTarget === 'visual' ? 'Use regular image upload' : cameraTarget === 'drug' ? 'Use regular drug upload' : 'Use regular upload'}
                 </button>
               </div>
             </MotionDiv>
@@ -2310,6 +2847,31 @@ function App() {
         .visual-tips strong {
           color: var(--text-primary);
           font-size: 14px;
+        }
+        .feature-grid {
+          display: grid;
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+          gap: 12px;
+          margin-top: 22px;
+        }
+        .feature-card {
+          padding: 16px;
+          border-radius: 18px;
+          border: 1px solid var(--border-color);
+          background: linear-gradient(160deg, color-mix(in srgb, var(--surface-soft) 55%, transparent), var(--surface-muted));
+          display: flex;
+          flex-direction: column;
+          gap: 8px;
+          min-height: 110px;
+        }
+        .feature-card strong {
+          color: var(--text-primary);
+          font-size: 14px;
+        }
+        .feature-card span {
+          color: var(--text-secondary);
+          font-size: 13px;
+          line-height: 1.6;
         }
         .example-chip {
           border: 1px solid var(--border-color);
@@ -2794,6 +3356,7 @@ function App() {
 
         @media (max-width: 900px) {
           .trust-strip { grid-template-columns: 1fr; }
+          .feature-grid { grid-template-columns: 1fr; }
           .example-prompts { grid-template-columns: 1fr; }
         }
 

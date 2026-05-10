@@ -1,0 +1,61 @@
+{
+  "resourceType": "Bundle",
+  "type": "collection",
+  "identifier": {
+    "system": "urn:aethermed:session",
+    "value": "example-session-visual-001"
+  },
+  "meta": {
+    "lastUpdated": "2026-05-10T12:01:00.000Z"
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:obs-visual-1",
+      "resource": {
+        "resourceType": "Observation",
+        "status": "final",
+        "code": {
+          "text": "Visible body image review summary"
+        },
+        "valueString": "Visible skin redness and mild localized swelling were noted from the uploaded image."
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:impression-visual-1",
+      "resource": {
+        "resourceType": "ClinicalImpression",
+        "status": "completed",
+        "description": "Visual safety review performed without diagnostic claims.",
+        "summary": "No definitive diagnosis was made. Escalation signs were highlighted for safety."
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:careplan-visual-1",
+      "resource": {
+        "resourceType": "CarePlan",
+        "status": "active",
+        "intent": "proposal",
+        "activity": [
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "description": "Keep area clean, monitor for spread, and seek in-person care if worsening."
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:communication-visual-1",
+      "resource": {
+        "resourceType": "Communication",
+        "status": "completed",
+        "payload": [
+          {
+            "contentString": "This image was reviewed with safety-first guidance only and not as a diagnosis."
+          }
+        ]
+      }
+    }
+  ]
+}
