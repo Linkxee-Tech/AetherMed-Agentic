@@ -1064,9 +1064,12 @@ function executeMcpTool(toolName, parameters = {}) {
 
     if (toolName === 'fhir_capabilities') {
         return {
-            extension: 'promptopinion.fhir',
+            extension: 'ai.promptopinion/fhir-context',
             supportedFhirVersion: '4.0.1',
-            supportedOperations: ['read', 'search', 'metadata'],
+            scopes: [
+                { name: 'patient/Patient.rs', required: true },
+                { name: 'patient/Condition.rs' }
+            ],
             mode: 'stub'
         };
     }
@@ -1163,11 +1166,11 @@ app.post('/mcp', (req, res) => {
                     prompts: { listChanged: false },
                     logging: {},
                     extensions: {
-                        fhir: {
-                            namespace: 'promptopinion.fhir',
-                            version: '1.0.0',
-                            fhirVersion: '4.0.1',
-                            supportedOperations: ['read', 'search', 'metadata']
+                        'ai.promptopinion/fhir-context': {
+                            scopes: [
+                                { name: 'patient/Patient.rs', required: true },
+                                { name: 'patient/Condition.rs' }
+                            ]
                         }
                     }
                 }
@@ -1221,9 +1224,12 @@ app.post('/mcp', (req, res) => {
 
         if (method === 'fhir/capabilities') {
             return respond({
-                extension: 'promptopinion.fhir',
+                extension: 'ai.promptopinion/fhir-context',
                 fhirVersion: '4.0.1',
-                supportedOperations: ['read', 'search', 'metadata'],
+                scopes: [
+                    { name: 'patient/Patient.rs', required: true },
+                    { name: 'patient/Condition.rs' }
+                ],
                 mode: 'stub'
             });
         }
