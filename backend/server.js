@@ -211,7 +211,13 @@ function buildAgentCard() {
         url: getPublicAgentUrl(),
         version: process.env.PROMPT_OPINION_AGENT_VERSION || '1.0.0',
         protocolVersion: A2A_PROTOCOL_VERSION,
-        supportedInterfaces: ['A2A', 'JSONRPC'],
+        supportedInterfaces: [
+            {
+                url: `${getPublicAgentUrl()}/`,
+                protocolBinding: 'JSONRPC',
+                protocolVersion: A2A_PROTOCOL_VERSION
+            }
+        ],
         preferredTransport: 'JSONRPC',
         defaultInputModes: ['text/plain', 'application/json'],
         defaultOutputModes: ['application/json', 'text/plain'],
