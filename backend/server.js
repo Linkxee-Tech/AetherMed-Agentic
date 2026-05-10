@@ -17,6 +17,7 @@ const { buildMultimodalSummary, buildUploadAssistantGuidance, classifyMultimodal
 const { sanitizeTextField, sanitizeUrgency, validateImageDataUrl } = require('./tools/requestValidation');
 const { executePromptOpinionTask } = require('./agents/promptOpinionAgent');
 const { classifyHealthIntent } = require('./tools/intentRouter');
+const { knowledge_lookup, risk_score } = require('./tools/tools');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -987,6 +988,80 @@ app.get('/api/v1/health', (req, res) => {
 
 app.get("/health", (req, res) => {
     res.send("OK");
+});
+
+/**
+ * @route GET /mcp/v1/tools
+ * @desc MCP tool discovery for Prompt Opinion integrations
+ */
+app.get('/mcp/v1/tools', (req, res) => {
+    return res.json({
+        tools: [
+            {
+                name: 'knowledge_lookup',
+                description: 'Retrieves known risks and standard protocols for a list of symptoms.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        symptoms: { type: 'array', items: { type: 'string' } }
+                    },
+                    required: ['symptoms']
+                }
+            },
+            {
+                name: 'risk_score',
+                description: 'Calculates clinical priority score combining multiple risk factors.',
+                parameters: {
+                    type: 'object',
+                    properties: {
+                        severity: { type: 'string' },
+                        ageRange: { type: 'string' },
+                        urgency: { type: 'number' }
+                    },
+                    required: ['severity', 'urgency']
+                }
+            }
+        ]
+    });
+});
+
+/**
+ * @route POST /mcp/v1/invoke
+ * @desc MCP tool invocation endpoint for Prompt Opinion integrations
+ */
+app.post('/mcp/v1/invoke', (req, res) => {
+    const { toolName, parameters = {} } = req.body || {};
+
+    if (!toolName) {
+        return res.status(400).json({ error: 'toolName is required.' });
+    }
+
+    try {
+        let result;
+
+        if (toolName === 'knowledge_lookup') {
+            if (!Array.isArray(parameters.symptoms)) {
+                return res.status(400).json({ error: "tool 'knowledge_lookup' requires an array of 'symptoms'." });
+            }
+            result = knowledge_lookup(parameters.symptoms);
+        } else if (toolName === 'risk_score') {
+            if (!parameters.severity || parameters.urgency === undefined || parameters.urgency === null) {
+                return res.status(400).json({ error: "tool 'risk_score' requires 'severity' and 'urgency'." });
+            }
+            result = risk_score(parameters.severity, parameters.ageRange || 'unknown', parameters.urgency);
+        } else {
+            return res.status(404).json({ error: `Tool ${toolName} not found mapped in MCP server.` });
+        }
+
+        return res.json({
+            success: true,
+            tool: toolName,
+            result
+        });
+    } catch (error) {
+        console.error('MCP Tool Execution Error:', error);
+        return res.status(500).json({ error: 'Internal execution failure.' });
+    }
 });
 
 app.get(AGENT_CARD_PATH, (req, res) => {
