@@ -1030,10 +1030,15 @@ app.get('/mcp/v1/tools', (req, res) => {
  * @desc MCP tool invocation endpoint for Prompt Opinion integrations
  */
 app.post('/mcp/v1/invoke', (req, res) => {
-    const { toolName, parameters = {} } = req.body || {};
+    const body = req.body || {};
+    const toolName = body.toolName || body.name || body.tool || body.method;
+    const parameters = body.parameters || body.arguments || body.args || body.input || {};
 
     if (!toolName) {
-        return res.status(400).json({ error: 'toolName is required.' });
+        return res.status(400).json({
+            error: 'toolName is required.',
+            detail: 'Provide one of: toolName, name, tool, or method.'
+        });
     }
 
     try {
