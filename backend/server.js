@@ -1016,6 +1016,27 @@ function buildMcpToolsList() {
                 },
                 required: ['severity', 'urgency']
             }
+        },
+        {
+            name: 'fhir_capabilities',
+            description: 'Returns FHIR extension capability metadata for Prompt Opinion compatibility.',
+            inputSchema: {
+                type: 'object',
+                properties: {},
+                additionalProperties: true
+            }
+        },
+        {
+            name: 'fhir_search_stub',
+            description: 'FHIR search placeholder tool. Returns a safe, empty Bundle scaffold.',
+            inputSchema: {
+                type: 'object',
+                properties: {
+                    resourceType: { type: 'string' },
+                    query: { type: 'object' }
+                },
+                required: ['resourceType']
+            }
         }
     ];
 }
@@ -1039,6 +1060,33 @@ function executeMcpTool(toolName, parameters = {}) {
         }
 
         return risk_score(parameters.severity, parameters.ageRange || 'unknown', parameters.urgency);
+    }
+
+    if (toolName === 'fhir_capabilities') {
+        return {
+            extension: 'promptopinion.fhir',
+            supportedFhirVersion: '4.0.1',
+            supportedOperations: ['read', 'search', 'metadata'],
+            mode: 'stub'
+        };
+    }
+
+    if (toolName === 'fhir_search_stub') {
+        if (!parameters.resourceType || typeof parameters.resourceType !== 'string') {
+            const error = new Error("tool 'fhir_search_stub' requires 'resourceType'.");
+            error.status = 400;
+            throw error;
+        }
+
+        return {
+            resourceType: 'Bundle',
+            type: 'searchset',
+            total: 0,
+            entry: [],
+            meta: {
+                tag: [{ system: 'urn:promptopinion:fhir', code: 'stub-response' }]
+            }
+        };
     }
 
     const error = new Error(`Tool ${toolName} not found mapped in MCP server.`);
@@ -1110,7 +1158,18 @@ app.post('/mcp', (req, res) => {
                     version: '1.0.0'
                 },
                 capabilities: {
-                    tools: { listChanged: false }
+                    tools: { listChanged: false },
+                    resources: { subscribe: false, listChanged: false },
+                    prompts: { listChanged: false },
+                    logging: {},
+                    extensions: {
+                        fhir: {
+                            namespace: 'promptopinion.fhir',
+                            version: '1.0.0',
+                            fhirVersion: '4.0.1',
+                            supportedOperations: ['read', 'search', 'metadata']
+                        }
+                    }
                 }
             });
         }
@@ -1148,6 +1207,44 @@ app.post('/mcp', (req, res) => {
             });
         }
 
+        if (method === 'resources/list') {
+            return respond({
+                resources: []
+            });
+        }
+
+        if (method === 'prompts/list') {
+            return respond({
+                prompts: []
+            });
+        }
+
+        if (method === 'fhir/capabilities') {
+            return respond({
+                extension: 'promptopinion.fhir',
+                fhirVersion: '4.0.1',
+                supportedOperations: ['read', 'search', 'metadata'],
+                mode: 'stub'
+            });
+        }
+
+        if (method === 'fhir/search') {
+            const resourceType = params.resourceType || params.type;
+            if (!resourceType || typeof resourceType !== 'string') {
+                return respondError(-32602, 'Invalid params', { detail: 'fhir/search requires resourceType.' });
+            }
+
+            return respond({
+                resourceType: 'Bundle',
+                type: 'searchset',
+                total: 0,
+                entry: [],
+                meta: {
+                    tag: [{ system: 'urn:promptopinion:fhir', code: 'stub-response' }]
+                }
+            });
+        }
+
         if (method === 'tools/call') {
             const toolName = params.name || params.toolName || params.tool;
             const argumentsPayload = params.arguments || params.parameters || {};
@@ -1163,7 +1260,11 @@ app.post('/mcp', (req, res) => {
                         type: 'text',
                         text: JSON.stringify(toolResult)
                     }
-                ]
+                ],
+                structuredContent: {
+                    result: toolResult
+                },
+                isError: false
             });
         }
 
