@@ -1103,6 +1103,14 @@ app.post('/mcp', (req, res) => {
             });
         }
 
+        if (method === 'notifications/initialized') {
+            return respond({});
+        }
+
+        if (method === 'ping') {
+            return respond({});
+        }
+
         if (method === 'tools/list') {
             return respond({
                 tools: buildMcpToolsList()
@@ -1141,6 +1149,18 @@ app.post('/mcp', (req, res) => {
         console.error('MCP JSON-RPC Error:', error);
         return respondError(-32603, 'Internal error', { detail: error.message });
     }
+});
+
+/**
+ * @route GET /mcp
+ * @desc MCP endpoint probe for platforms that validate endpoint reachability with GET
+ */
+app.get('/mcp', (req, res) => {
+    return res.json({
+        status: 'ok',
+        protocol: 'mcp-jsonrpc',
+        hint: 'Use POST with JSON-RPC 2.0 methods initialize, tools/list, tools/call.'
+    });
 });
 
 /**
